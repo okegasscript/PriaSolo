@@ -1,9 +1,11 @@
 --[[
-  DataPetModule.lua
+  DataPetModule.lua (OPTIMIZED)
   - Mengambil data pet dari DataService (dengan pencarian otomatis)
   - Menyediakan fungsi pencarian pet berdasarkan nama, mutasi, UUID, dll
   - Bisa dipanggil dari client maupun server
   - Cocok untuk executor (tidak perlu patch)
+  - PERUBAHAN: mutation module lookup di-cache, tidak scan ulang tiap panggilan
+    (fix freeze/lag saat inventory besar)
 --]]
 
 local DataService = nil
@@ -11,7 +13,6 @@ local DataService = nil
 -- Fungsi untuk mencari DataService di berbagai lokasi
 local function findDataService()
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    -- 1. Coba di ReplicatedStorage.Modules
     local modules = ReplicatedStorage:FindFirstChild("Modules")
     if modules then
         local ds = modules:FindFirstChild("DataService")
@@ -19,16 +20,13 @@ local function findDataService()
             return require(ds)
         end
     end
-    -- 2. Coba langsung di ReplicatedStorage
     local ds = ReplicatedStorage:FindFirstChild("DataService")
     if ds then
         return require(ds)
     end
-    -- 3. Coba dari _G (jika sudah di-set oleh script lain)
     if _G.DataService then
         return _G.DataService
     end
-    -- 4. Coba gunakan DataService yang mungkin tersedia di game
     local success, result = pcall(function()
         return game:GetService("DataService")
     end)
@@ -40,11 +38,17 @@ end
 
 DataService = findDataService()
 
--- ==== Fungsi getAutoMutationName (sama seperti sebelumnya) ====
-local function getAutoMutationName(rawCode)
-    if not rawCode or rawCode == "Normal" or rawCode == "" then
-        return "Normal"
-    end
+-- ==== CACHE untuk mutation lookup ====
+-- Sebelumnya: getAutoMutationName scan ReplicatedStorage:GetDescendants() SETIAP kali dipanggil,
+-- dan dipanggil untuk SETIAP pet di inventory -> sangat berat kalau inventory besar (ratusan item).
+-- Sekarang: scan hanya dilakukan SEKALI, hasilnya disimpan di cache, dan cache dipakai untuk semua
+-- pencarian berikutnya. Ini menghilangkan sumber freeze/lag utama.
+
+local mutationCache = nil -- table: { [rawCode] = mutationName }
+local mutationModulesScanned = false
+
+local function buildMutationCache()
+    mutationCache = {}
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
         if obj:IsA("ModuleScript") and (
@@ -55,16 +59,14 @@ local function getAutoMutationName(rawCode)
             local success, mod = pcall(require, obj)
             if success and type(mod) == "table" then
                 for k, v in pairs(mod) do
-                    if tostring(k) == tostring(rawCode) and type(v) == "string" then
-                        return v
-                    elseif tostring(v) == tostring(rawCode) and type(k) == "string" then
-                        return k
+                    if type(v) == "string" then
+                        mutationCache[tostring(k)] = v
+                        mutationCache[tostring(v)] = k
                     elseif type(v) == "table" then
                         for subK, subV in pairs(v) do
-                            if tostring(subK) == tostring(rawCode) and type(subV) == "string" then
-                                return subV
-                            elseif tostring(subV) == tostring(rawCode) and type(subK) == "string" then
-                                return subK
+                            if type(subV) == "string" then
+                                mutationCache[tostring(subK)] = subV
+                                mutationCache[tostring(subV)] = subK
                             end
                         end
                     end
@@ -72,13 +74,35 @@ local function getAutoMutationName(rawCode)
             end
         end
     end
+    mutationModulesScanned = true
+end
+
+local function getAutoMutationName(rawCode)
+    if not rawCode or rawCode == "Normal" or rawCode == "" then
+        return "Normal"
+    end
+
+    -- Scan hanya sekali (lazy init), pakai cache untuk selanjutnya
+    if not mutationModulesScanned then
+        buildMutationCache()
+    end
+
+    local cached = mutationCache[tostring(rawCode)]
+    if cached then
+        return cached
+    end
+
     return tostring(rawCode)
+end
+
+-- Fungsi publik untuk paksa refresh cache (panggil manual kalau ada mutation baru di-update game)
+local function refreshMutationCache()
+    buildMutationCache()
 end
 
 -- ===== Module =====
 local DataPetModule = {}
 
--- Mendapatkan seluruh data inventory pet
 function DataPetModule.getAllPets()
     local data = DataService:GetData()
     if not data then return {} end
@@ -86,14 +110,12 @@ function DataPetModule.getAllPets()
     return inv or {}
 end
 
--- Mendapatkan daftar UUID pet yang sedang di-equip
 function DataPetModule.getEquippedPets()
     local data = DataService:GetData()
     if not data then return {} end
     return data.PetsData and data.PetsData.EquippedPets or {}
 end
 
--- Mendapatkan detail pet yang sedang di-equip (UUID + data lengkap)
 function DataPetModule.getEquippedPetDetails()
     local equippedUUIDs = DataPetModule.getEquippedPets()
     local details = {}
@@ -107,7 +129,6 @@ function DataPetModule.getEquippedPetDetails()
     return details
 end
 
--- Mencari pet berdasarkan nama (case-insensitive, partial match)
 function DataPetModule.findPetsByExactName(name, excludeUUIDs)
     excludeUUIDs = excludeUUIDs or {}
     local results = {}
@@ -134,7 +155,6 @@ function DataPetModule.findPetsByExactName(name, excludeUUIDs)
     return results
 end
 
--- Mencari pet dengan filter lengkap (nama, mutasi, level, berat, favorit, dll)
 function DataPetModule.findPets(filter)
     filter = filter or {}
     local excludeUUIDs = filter.excludeUUIDs or {}
@@ -151,7 +171,6 @@ function DataPetModule.findPets(filter)
             local isFav = petData.IsFavorite or false
             local passive = petData.Passive or ""
 
-            -- Filter logika
             local match = true
             if filter.type and string.lower(pType) ~= string.lower(filter.type) then
                 match = false
@@ -196,7 +215,6 @@ function DataPetModule.findPets(filter)
             end
         end
     end
-    -- Batasi hasil jika ada limit
     if filter.limit and #results > filter.limit then
         for i = #results, filter.limit + 1, -1 do
             table.remove(results, i)
@@ -205,15 +223,18 @@ function DataPetModule.findPets(filter)
     return results
 end
 
--- Cari pet pertama yang cocok (single result)
 function DataPetModule.findPet(filter)
     local results = DataPetModule.findPets(filter)
     return results[1] or nil
 end
 
--- Mendapatkan nama mutasi dari kode
 function DataPetModule.getAutoMutationName(rawCode)
     return getAutoMutationName(rawCode)
+end
+
+-- Expose fungsi refresh cache, jaga-jaga kalau perlu di-reset manual
+function DataPetModule.refreshMutationCache()
+    refreshMutationCache()
 end
 
 -- ===== Cooldown cache =====
