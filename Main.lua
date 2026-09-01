@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield GEN2 (Final Fix)
+-- Pria Solo HUB - Rayfield GEN2 (Dengan Error Handling)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -9,31 +9,49 @@ local player = Players.LocalPlayer
 local CONFIG_FILE = "PriaSolo.json"
 
 -- ============================================================
--- LOAD MODULES
+-- LOAD MODUL DENGAN ERROR HANDLING
 -- ============================================================
-
-local DataPetModule, SharkLogic, Rayfield
 
 local function loadModule(url)
     local success, result = pcall(function()
-        return loadstring(game:HttpGet(url))()
+        return game:HttpGet(url)
     end)
     if not success then
-        warn("❌ Gagal load module dari " .. url .. ": " .. tostring(result))
+        warn("❌ Gagal mendownload module dari:", url)
         return nil
     end
-    return result
+    local fn, err = loadstring(result)
+    if not fn then
+        warn("❌ Gagal compile module:", err)
+        return nil
+    end
+    local module, err2 = pcall(fn)
+    if not module then
+        warn("❌ Gagal execute module:", err2)
+        return nil
+    end
+    return module
 end
 
-DataPetModule = loadModule("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua")
-SharkLogic = loadModule("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/SharkLogic.lua")
-Rayfield = loadModule("https://sirius.menu/gen2")
-
-if not DataPetModule or not SharkLogic or not Rayfield then
-    error("❌ Gagal memuat modul yang diperlukan.")
+-- Load DataPetModule
+local DataPetModule = loadModule("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua")
+if not DataPetModule then
+    error("❌ Gagal memuat DataPetModule")
 end
 
-print("✅ Modul berhasil dimuat")
+-- Load SharkLogic
+local SharkLogic = loadModule("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/SharkLogic.lua")
+if not SharkLogic then
+    error("❌ Gagal memuat SharkLogic")
+end
+
+-- Load Rayfield
+local Rayfield = loadModule("https://sirius.menu/gen2")
+if not Rayfield then
+    error("❌ Gagal memuat Rayfield")
+end
+
+print("✅ Semua modul berhasil dimuat")
 
 -- ============================================================
 -- FUNGSI BANTUAN
@@ -690,7 +708,7 @@ local TumbalInput, MinLevelSlider, TargetLevelSlider
 local SharkToggle, LevelingToggle, PnpToggle
 
 -- ============================================================
--- UPDATE UI (dipanggil saat load/reset/refresh)
+-- UPDATE UI
 -- ============================================================
 
 local function updateAllUI()
@@ -808,10 +826,9 @@ local function updateAllUI()
 end
 
 -- ============================================================
--- BUAT UI ELEMENTS
+-- TAB 1: AUTO SHARK
 -- ============================================================
 
--- TAB 1: AUTO SHARK
 local sharkTab = Window:CreateTab({ name = "Auto Shark", icon = "shark" })
 
 sharkTab:CreateInput({
@@ -1026,7 +1043,10 @@ SharkToggle = sharkTab:CreateToggle({
     end
 })
 
+-- ============================================================
 -- TAB 2: AUTO LEVELING
+-- ============================================================
+
 local levelingTab = Window:CreateTab({ name = "Auto Leveling", icon = "rocket" })
 
 levelingTab:CreateInput({
@@ -1179,7 +1199,10 @@ LevelingToggle = levelingTab:CreateToggle({
     end
 })
 
+-- ============================================================
 -- TAB 3: PNP
+-- ============================================================
+
 local pnpTab = Window:CreateTab({ name = "PNP", icon = "bolt" })
 
 pnpTab:CreateInput({
@@ -1290,7 +1313,10 @@ PnpToggle = pnpTab:CreateToggle({
     end
 })
 
+-- ============================================================
 -- TAB 4: PENGATURAN
+-- ============================================================
+
 local settingsTab = Window:CreateTab({ name = "Pengaturan", icon = "gear" })
 
 settingsTab:CreateButton({
