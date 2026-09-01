@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield GEN2 (Tanpa Label, Full Print)
+-- Pria Solo HUB - Rayfield GEN2 (Final Fix)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -431,7 +431,7 @@ local TimDropdown, TargetLevelDropdown
 local PnpDropdown
 
 -- ============================================================
--- FUNGSI REFRESH
+-- FUNGSI REFRESH (dengan pengecekan)
 -- ============================================================
 
 local function refreshMimicDropdown(filterText)
@@ -679,7 +679,7 @@ local function refreshAllUI()
 end
 
 -- ============================================================
--- SAVE / LOAD (manual)
+-- SAVE / LOAD
 -- ============================================================
 
 local function saveConfig()
@@ -1221,6 +1221,7 @@ settingsTab:CreateButton({
 -- INISIALISASI AWAL
 -- ============================================================
 
+-- Panggil refreshAllUI setelah semua UI dibuat
 refreshAllUI()
 
 print("✅ Pria Solo HUB siap (Rayfield GEN2). Tekan K untuk membuka UI.")
