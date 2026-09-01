@@ -284,6 +284,21 @@ local StartToggle = MainTab:CreateToggle({
         end
     end
 })
+-- Rate hasil kalibrasi dari data Lion (BaseWeight 5.549 -> 284.92 KG di Level 500)
+local WEIGHT_GROWTH_RATE = 0.5599
+
+local function estimateWeight(baseWeight, level)
+    baseWeight = baseWeight or 0
+    level = level or 1
+    return baseWeight + (level - 1) * WEIGHT_GROWTH_RATE
+end
+
+-- Helper: format label pet (SUDAH DIUBAH pakai estimateWeight)
+local function formatPetLabel(pet)
+    local rawBaseWeight = pet.petData and pet.petData.BaseWeight or pet.weight or 0
+    local estimatedWeight = estimateWeight(rawBaseWeight, pet.level)
+    return string.format("%s %s %.2f KG Lv.%d", pet.mutation, pet.name, estimatedWeight, pet.level)
+end
 
 -- Load awal
 refreshMimicDropdown()
