@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield GEN2
+-- Pria Solo HUB - Rayfield GEN2 (Tanpa Label, Full Print)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -424,7 +424,6 @@ end)
 -- ============================================================
 
 local Window
-local StatusLabel
 local TumbalInput, MinLevelSlider, TargetLevelSlider
 local SharkToggle, LevelingToggle, PnpToggle
 local MimicDropdown, SharkDropdown, TargetDropdown
@@ -432,16 +431,8 @@ local TimDropdown, TargetLevelDropdown
 local PnpDropdown
 
 -- ============================================================
--- FUNGSI REFRESH (untuk Gen2)
+-- FUNGSI REFRESH (tanpa label)
 -- ============================================================
-
-local function updateStatusLabel()
-    if not StatusLabel then return end
-    local mimicText = state.selectedMimicUUID and tostring(state.selectedMimicUUID) or "(belum)"
-    local sharkText = state.selectedSharkUUID and tostring(state.selectedSharkUUID) or "(belum)"
-    local targetCount = #state.targetQueue
-    StatusLabel:Set("Mimic: " .. mimicText .. " | Shark: " .. sharkText .. " | Target: " .. targetCount .. " terpilih")
-end
 
 local function refreshMimicDropdown(filterText)
     filterText = filterText or ""
@@ -533,7 +524,6 @@ local function refreshTargetDropdown(filterText)
     if TargetDropdown then
         TargetDropdown:SetOptions(options)
         if #currentQueue > 0 then
-            -- Set selected values
             local selectedLabels = {}
             for _, uuid in ipairs(currentQueue) do
                 for label, u in pairs(labelToUUID) do
@@ -676,7 +666,6 @@ local function refreshAllUI()
     refreshTimDropdown()
     refreshTargetLevelDropdown()
     refreshPnpDropdown()
-    updateStatusLabel()
 
     if TumbalInput then
         TumbalInput:SetValue(table.concat(state.tumbalNames, ", "))
@@ -690,7 +679,7 @@ local function refreshAllUI()
 end
 
 -- ============================================================
--- SAVE / LOAD (manual, tetap sama)
+-- SAVE / LOAD (manual)
 -- ============================================================
 
 local function saveConfig()
@@ -795,7 +784,7 @@ end
 Window = Rayfield:CreateWindow({
     name = "Pria Solo HUB",
     configuration = {
-        autoSave = false,   -- kita pake manual save
+        autoSave = false,
         autoLoad = false,
         fileName = "Settings",
         customFolder = "PriaSolo",
@@ -808,8 +797,6 @@ Window = Rayfield:CreateWindow({
 -- ============================================================
 
 local sharkTab = Window:CreateTab({ name = "Auto Shark", icon = "shark" })
-
-StatusLabel = sharkTab:CreateLabel({ text = "Mimic: (belum) | Shark: (belum) | Target: 0 terpilih" })
 
 sharkTab:CreateInput({
     name = "🔍 Cari Mimic",
@@ -834,7 +821,6 @@ MimicDropdown = sharkTab:CreateDropdown({
         if uuid then
             state.selectedMimicUUID = uuid
             print("✅ Mimic dipilih:", selectedLabel, "UUID:", uuid)
-            updateStatusLabel()
         end
     end
 })
@@ -862,7 +848,6 @@ SharkDropdown = sharkTab:CreateDropdown({
         if uuid then
             state.selectedSharkUUID = uuid
             print("✅ Shark dipilih:", selectedLabel, "UUID:", uuid)
-            updateStatusLabel()
         end
     end
 })
@@ -892,7 +877,6 @@ TargetDropdown = sharkTab:CreateDropdown({
         end
         state.currentTargetIndex = 1
         print("✅ Target dipilih:", #state.targetQueue, "pet")
-        updateStatusLabel()
     end
 })
 
