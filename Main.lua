@@ -1,5 +1,5 @@
 -- ============================================================
--- Auto Shark - Main Entry
+-- Auto Shark - Main Entry (FINAL)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -17,7 +17,10 @@ end
 
 print("✅ Semua modul berhasil dimuat")
 
--- State global
+-- ============================================================
+-- STATE GLOBAL
+-- ============================================================
+
 local state = {
     isActive = false,
     isProcessing = false,
@@ -31,13 +34,19 @@ local state = {
     lastActionTime = 0
 }
 
--- Event service
+-- ============================================================
+-- EVENT SERVICE
+-- ============================================================
+
 local GameEvents = ReplicatedStorage:WaitForChild("GameEvents")
 local PetCooldownsEvent = GameEvents:WaitForChild("PetCooldownsUpdated")
 local PetsService = GameEvents:WaitForChild("PetsService")
 local NotificationEvent = GameEvents:WaitForChild("Notification")
 
--- Fungsi logika (equip/unequip)
+-- ============================================================
+-- FUNGSI LOGIKA (equip/unequip)
+-- ============================================================
+
 local function unequipTargetAndEquipShark()
     if state.currentTargetUUID then
         SharkLogic.unequipPet(PetsService, state.currentTargetUUID)
@@ -74,10 +83,19 @@ local function unequipSharkAndEquipTumbalTarget()
     end
 end
 
--- Event listener
+-- ============================================================
+-- EVENT LISTENER
+-- ============================================================
+
+-- Flag anti-tabrakan: mencegah beberapa event yang datang beruntun memicu
+-- unequipSharkAndEquipTumbalTarget() secara bersamaan (penyebab utama freeze
+-- karena tiap panggilan melakukan scan inventory yang berat)
+local isHandlingCooldownEvent = false
+
 PetCooldownsEvent.OnClientEvent:Connect(function(petId, dataArray)
     if not state.isActive then return end
     if petId ~= state.selectedMimicUUID then return end
+    if isHandlingCooldownEvent then return end -- sedang diproses, abaikan event yang numpuk
 
     local time = nil
     for _, entry in ipairs(dataArray) do
@@ -86,15 +104,24 @@ PetCooldownsEvent.OnClientEvent:Connect(function(petId, dataArray)
     if time == nil then return end
 
     if state.isProcessing and time > 0.1 then
-        unequipTargetAndEquipShark()
+        isHandlingCooldownEvent = true
+        local ok, err = pcall(unequipTargetAndEquipShark)
+        if not ok then warn("❌ Error unequipTargetAndEquipShark:", err) end
+        isHandlingCooldownEvent = false
     end
 
     if not state.isProcessing and time <= 0.1 then
         local now = os.clock()
         if now - state.lastActionTime < 0.5 then return end
         state.lastActionTime = now
-        task.wait(0.6)
-        unequipSharkAndEquipTumbalTarget()
+
+        isHandlingCooldownEvent = true
+        task.spawn(function()
+            task.wait(0.6)
+            local ok, err = pcall(unequipSharkAndEquipTumbalTarget)
+            if not ok then warn("❌ Error unequipSharkAndEquipTumbalTarget:", err) end
+            isHandlingCooldownEvent = false
+        end)
     end
 end)
 
@@ -109,6 +136,7 @@ end)
 
 -- ============================================================
 -- WEIGHT ESTIMATION
+-- (kalibrasi dari data Lion: BaseWeight 5.549 -> 284.92 KG @ Level 500)
 -- ============================================================
 
 local WEIGHT_GROWTH_RATE = 0.5599
@@ -139,16 +167,19 @@ local Window = Rayfield:CreateWindow({
 
 local MainTab = Window:CreateTab("Auto Shark")
 
+-- Helper: format label pet (pakai estimasi weight, BUKAN BaseWeight mentah)
 local function formatPetLabel(pet)
     local rawBaseWeight = (pet.petData and pet.petData.BaseWeight) or 0
     local estimatedWeight = estimateWeight(rawBaseWeight, pet.level)
     return string.format("%s %s %.2f KG Lv.%d", pet.mutation, pet.name, estimatedWeight, pet.level)
 end
 
+-- Helper: cari pet favorit berdasarkan keyword nama (partial match, case-insensitive)
 local function getFavoritesByKeyword(keyword)
     return DataPetModule.findPets({ name = keyword, isFavorite = true })
 end
 
+-- Mapping label -> uuid (dipakai ulang saat dropdown callback jalan)
 local mimicLabelToUUID = {}
 local sharkLabelToUUID = {}
 
@@ -161,7 +192,7 @@ local function updateStatusLabel()
     StatusLabel:Set("Mimic: " .. mimicText .. " | Shark: " .. sharkText)
 end
 
--- 1. Dropdown Mimic 
+-- 1. Dropdown Mimic (handle baik string maupun table dari callback)
 local MimicDropdown = MainTab:CreateDropdown({
     Name = "Pilih Mimic",
     Options = {"Memuat data..."},
@@ -169,14 +200,11 @@ local MimicDropdown = MainTab:CreateDropdown({
     MultipleOptions = false,
     Callback = function(option)
         print("[DEBUG] Mimic dropdown RAW callback:", option, type(option))
-
         local selectedLabel = option
         if type(option) == "table" then
             selectedLabel = option[1]
         end
-
         print("[DEBUG] Mimic selectedLabel setelah normalisasi:", selectedLabel)
-
         local uuid = mimicLabelToUUID[selectedLabel]
         if uuid then
             state.selectedMimicUUID = uuid
@@ -188,7 +216,7 @@ local MimicDropdown = MainTab:CreateDropdown({
     end
 })
 
--- 2. Dropdown Shark 
+-- 2. Dropdown Shark (handle baik string maupun table dari callback)
 local SharkDropdown = MainTab:CreateDropdown({
     Name = "Pilih Shark",
     Options = {"Memuat data..."},
@@ -196,14 +224,11 @@ local SharkDropdown = MainTab:CreateDropdown({
     MultipleOptions = false,
     Callback = function(option)
         print("[DEBUG] Shark dropdown RAW callback:", option, type(option))
-
         local selectedLabel = option
         if type(option) == "table" then
             selectedLabel = option[1]
         end
-
         print("[DEBUG] Shark selectedLabel setelah normalisasi:", selectedLabel)
-
         local uuid = sharkLabelToUUID[selectedLabel]
         if uuid then
             state.selectedSharkUUID = uuid
@@ -215,6 +240,7 @@ local SharkDropdown = MainTab:CreateDropdown({
     end
 })
 
+-- Fungsi refresh dropdown Mimic
 local function refreshMimicDropdown()
     local hasil = getFavoritesByKeyword("Mimic")
     local options = {}
@@ -233,6 +259,7 @@ local function refreshMimicDropdown()
     MimicDropdown:Refresh(options)
 end
 
+-- Fungsi refresh dropdown Shark
 local function refreshSharkDropdown()
     local hasil = getFavoritesByKeyword("Shark")
     local options = {}
@@ -251,6 +278,7 @@ local function refreshSharkDropdown()
     SharkDropdown:Refresh(options)
 end
 
+-- Tombol refresh manual (jaga-jaga kalau data telat load)
 MainTab:CreateButton({
     Name = "🔄 Refresh Daftar Pet",
     Callback = function()
@@ -259,6 +287,7 @@ MainTab:CreateButton({
     end
 })
 
+-- Input Target
 MainTab:CreateInput({
     Name = "Nama Target",
     PlaceholderText = "Contoh: Moon Cat",
@@ -271,6 +300,7 @@ MainTab:CreateInput({
     end
 })
 
+-- Input Tumbal (bisa banyak, dipisah koma)
 MainTab:CreateInput({
     Name = "Nama Tumbal (pisah koma)",
     PlaceholderText = "Contoh: Dog, Cat, Golden Lab",
@@ -291,6 +321,8 @@ MainTab:CreateInput({
     end
 })
 
+-- 3. Toggle Start/Stop (elemen paling bawah)
+-- PENTING: deklarasi & assignment dipisah supaya tidak nil saat callback dipanggil
 local StartToggle
 StartToggle = MainTab:CreateToggle({
     Name = "▶️ Start / Stop",
@@ -324,6 +356,10 @@ StartToggle = MainTab:CreateToggle({
         end
     end
 })
+
+-- ============================================================
+-- LOAD AWAL
+-- ============================================================
 
 refreshMimicDropdown()
 refreshSharkDropdown()
