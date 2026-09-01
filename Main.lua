@@ -266,19 +266,21 @@ MainTab:CreateInput({
 })
 
 -- 3. Toggle Start/Stop (elemen paling bawah)
-local StartToggle = MainTab:CreateToggle({
+-- PENTING: deklarasi & assignment dipisah supaya tidak nil saat callback dipanggil
+local StartToggle
+StartToggle = MainTab:CreateToggle({
     Name = "▶️ Start / Stop",
     CurrentValue = false,
     Callback = function(Value)
         if Value then
             if not state.selectedMimicUUID then
                 print("⚠️ Pilih Mimic dulu!")
-                StartToggle:Set(false)
+                if StartToggle then StartToggle:Set(false) end
                 return
             end
             if not state.selectedSharkUUID then
                 print("⚠️ Pilih Shark dulu!")
-                StartToggle:Set(false)
+                if StartToggle then StartToggle:Set(false) end
                 return
             end
             state.isActive = true
