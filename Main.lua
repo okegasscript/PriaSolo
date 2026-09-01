@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield 1 (dengan custom save/load)
+-- Pria Solo HUB - FINAL (Rayfield v1, perbaikan metode)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -96,7 +96,7 @@ local PetsService = GameEvents:WaitForChild("PetsService")
 local NotificationEvent = GameEvents:WaitForChild("Notification")
 
 -- ============================================================
--- FUNGSI UNEQUIP SELEKTIF
+-- FUNGSI UNEQUIP SELEKTIF (sama seperti sebelumnya)
 -- ============================================================
 
 local function unequipAllGardenPets(keepUUIDs, timeout)
@@ -149,7 +149,7 @@ local function unequipAllGardenPets(keepUUIDs, timeout)
 end
 
 -- ============================================================
--- FUNGSI LOGIKA AUTO SHARK
+-- FUNGSI LOGIKA AUTO SHARK (sama seperti sebelumnya)
 -- ============================================================
 
 local function unequipTargetAndEquipShark()
@@ -219,7 +219,7 @@ local function unequipSharkAndEquipTumbalTarget()
 end
 
 -- ============================================================
--- FUNGSI LOGIKA AUTO LEVELING
+-- FUNGSI LOGIKA AUTO LEVELING (sama seperti sebelumnya)
 -- ============================================================
 
 local function getPetLevel(uuid)
@@ -338,7 +338,7 @@ local function stopLeveling()
 end
 
 -- ============================================================
--- FUNGSI LOGIKA PNP (tanpa print)
+-- FUNGSI LOGIKA PNP (tanpa print, CFrame default)
 -- ============================================================
 
 local function pnpProcessPet(uuid)
@@ -420,7 +420,7 @@ NotificationEvent.OnClientEvent:Connect(function(message)
 end)
 
 -- ============================================================
--- SAVE / LOAD (custom)
+-- SAVE / LOAD (menggunakan writefile/readfile, independen dari Rayfield)
 -- ============================================================
 
 local function saveConfig()
@@ -519,7 +519,7 @@ local function resetAllSettings()
 end
 
 -- ============================================================
--- DEKLARASI VARIABEL UI (Rayfield 1)
+-- DEKLARASI VARIABEL UI
 -- ============================================================
 
 local Window
@@ -531,7 +531,7 @@ local TimDropdown, TargetLevelDropdown
 local PnpDropdown
 
 -- ============================================================
--- FUNGSI REFRESH (Rayfield 1)
+-- FUNGSI REFRESH (dengan perbaikan metode Rayfield v1)
 -- ============================================================
 
 local function updateStatusLabel()
@@ -561,7 +561,8 @@ local function refreshMimicDropdown(filterText)
     table.sort(options, sortAlphabetically)
     if #options == 0 then options = {"❌ Tidak ada Mimic favorit"} end
     if MimicDropdown then
-        MimicDropdown:SetOptions(options)
+        -- Rayfield v1: Refresh untuk mengganti opsi
+        MimicDropdown:Refresh(options)
         if currentUUID then
             for label, uuid in pairs(labelToUUID) do
                 if uuid == currentUUID then
@@ -593,7 +594,7 @@ local function refreshSharkDropdown(filterText)
     table.sort(options, sortAlphabetically)
     if #options == 0 then options = {"❌ Tidak ada Shark favorit"} end
     if SharkDropdown then
-        SharkDropdown:SetOptions(options)
+        SharkDropdown:Refresh(options)
         if currentUUID then
             for label, uuid in pairs(labelToUUID) do
                 if uuid == currentUUID then
@@ -630,7 +631,7 @@ local function refreshTargetDropdown(filterText)
     table.sort(options, sortAlphabetically)
     if #options == 0 then options = {"❌ Tidak ada target"} end
     if TargetDropdown then
-        TargetDropdown:SetOptions(options)
+        TargetDropdown:Refresh(options)
         if #currentQueue > 0 then
             local selectedLabels = {}
             for _, uuid in ipairs(currentQueue) do
@@ -668,7 +669,7 @@ local function refreshTimDropdown(filterText)
     table.sort(options, sortAlphabetically)
     if #options == 0 then options = {"❌ Tidak ada pet favorit"} end
     if TimDropdown then
-        TimDropdown:SetOptions(options)
+        TimDropdown:Refresh(options)
         if #currentTim > 0 then
             local selectedLabels = {}
             for _, uuid in ipairs(currentTim) do
@@ -706,7 +707,7 @@ local function refreshTargetLevelDropdown(filterText)
     table.sort(options, sortAlphabetically)
     if #options == 0 then options = {"❌ Tidak ada pet non-favorit"} end
     if TargetLevelDropdown then
-        TargetLevelDropdown:SetOptions(options)
+        TargetLevelDropdown:Refresh(options)
         if #currentTargets > 0 then
             local selectedLabels = {}
             for _, uuid in ipairs(currentTargets) do
@@ -744,7 +745,7 @@ local function refreshPnpDropdown(filterText)
     table.sort(options, sortAlphabetically)
     if #options == 0 then options = {"❌ Tidak ada pet favorit"} end
     if PnpDropdown then
-        PnpDropdown:SetOptions(options)
+        PnpDropdown:Refresh(options)
         if #currentPnp > 0 then
             local selectedLabels = {}
             for _, uuid in ipairs(currentPnp) do
@@ -776,32 +777,30 @@ local function refreshAllUI()
     refreshPnpDropdown()
     updateStatusLabel()
     if TumbalInput then
-        TumbalInput:Set(table.concat(state.tumbalNames, ", "))
+        TumbalInput:SetCurrentValue(table.concat(state.tumbalNames, ", "))
     end
     if MinLevelSlider then
-        MinLevelSlider:Set(state.minLevel)
+        MinLevelSlider:SetCurrentValue(state.minLevel)
     end
     if TargetLevelSlider then
-        TargetLevelSlider:Set(state.targetLevel)
+        TargetLevelSlider:SetCurrentValue(state.targetLevel)
     end
 end
 
 -- ============================================================
--- UI (Rayfield 1)
+-- UI (Rayfield v1)
 -- ============================================================
 
 Window = Rayfield:CreateWindow({
     Name = "Pria Solo HUB",
-    LoadingTitle = "Memuat...",
-    LoadingSubtitle = "by PriaSolo",
     ConfigurationSaving = {
-        Enabled = true,
+        Enabled = false, -- kita tidak pakai fitur save bawaan Rayfield
         FolderName = "PriaSolo",
         FileName = "Settings"
     },
     Key = Enum.KeyCode.K,
-    AutoLoadConfig = true,
-    AutoSaveConfig = true
+    AutoLoadConfig = false,
+    AutoSaveConfig = false
 })
 
 -- ============================================================
@@ -941,22 +940,22 @@ SharkToggle = SharkTab:CreateToggle({
         if Value then
             if state.isLevelingActive then
                 print("⚠️ Auto Leveling sedang aktif! Matikan dulu.")
-                if SharkToggle then SharkToggle:Set(false) end
+                SharkToggle:Set(false)
                 return
             end
             if not state.selectedMimicUUID then
                 print("⚠️ Pilih Mimic dulu!")
-                if SharkToggle then SharkToggle:Set(false) end
+                SharkToggle:Set(false)
                 return
             end
             if not state.selectedSharkUUID then
                 print("⚠️ Pilih Shark dulu!")
-                if SharkToggle then SharkToggle:Set(false) end
+                SharkToggle:Set(false)
                 return
             end
             if #state.targetQueue == 0 then
                 print("⚠️ Pilih target dulu (multiple)!")
-                if SharkToggle then SharkToggle:Set(false) end
+                SharkToggle:Set(false)
                 return
             end
 
@@ -1077,23 +1076,23 @@ LevelingToggle = LevelingTab:CreateToggle({
         if Value then
             if state.isSharkActive then
                 print("⚠️ Auto Shark sedang aktif! Matikan dulu.")
-                if LevelingToggle then LevelingToggle:Set(false) end
+                LevelingToggle:Set(false)
                 return
             end
             if #state.levelingTim == 0 then
                 print("⚠️ Pilih Tim Leveling dulu!")
-                if LevelingToggle then LevelingToggle:Set(false) end
+                LevelingToggle:Set(false)
                 return
             end
             if #state.levelingTargets == 0 then
                 print("⚠️ Pilih Target Leveling dulu!")
-                if LevelingToggle then LevelingToggle:Set(false) end
+                LevelingToggle:Set(false)
                 return
             end
             startLeveling()
         else
             stopLeveling()
-            if LevelingToggle then LevelingToggle:Set(false) end
+            LevelingToggle:Set(false)
         end
     end
 })
@@ -1173,7 +1172,7 @@ PnpToggle = PnpTab:CreateToggle({
         if Value then
             if #state.pnpPets == 0 then
                 print("⚠️ Pilih pet dulu!")
-                if PnpToggle then PnpToggle:Set(false) end
+                PnpToggle:Set(false)
                 return
             end
             state.pnpActive = true
@@ -1189,7 +1188,7 @@ PnpToggle = PnpTab:CreateToggle({
 })
 
 -- ============================================================
--- TAB 4: PENGATURAN (dengan tombol save/load custom)
+-- TAB 4: PENGATURAN
 -- ============================================================
 
 local SettingsTab = Window:CreateTab("Pengaturan", nil)
@@ -1215,4 +1214,4 @@ SettingsTab:CreateButton({
 
 refreshAllUI()
 
-print("✅ Pria Solo HUB siap (Rayfield 1 dengan custom save/load). Tekan K untuk membuka UI.")
+print("✅ Pria Solo HUB siap (Rayfield v1). Tekan K untuk membuka UI.")
