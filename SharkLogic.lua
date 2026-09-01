@@ -1,29 +1,30 @@
--- SharkLogic.lua
 local SharkLogic = {}
 
 SharkLogic.defaultConfig = {
+    targetName = "Moon Cat",
+    tumbalNames = {"Dog"},
     slotCFrame = CFrame.new(-13.018989562988, 0, -74.922821044922, 1,0,0,0,1,0,0,0,1)
 }
 
--- Mencari tumbal berdasarkan daftar nama (filter non-fav, level>=100, cat harus Blossoming)
-function SharkLogic.findTumbal(dataPetModule, tumbalNames, excludeUUIDs)
+-- Fungsi findTumbal dengan parameter minLevel (default 0)
+function SharkLogic.findTumbal(dataPetModule, tumbalNames, excludeUUIDs, minLevel)
+    minLevel = minLevel or 0
     excludeUUIDs = excludeUUIDs or {}
     for _, name in ipairs(tumbalNames) do
         local results = dataPetModule.findPets({
             exactName = name,
             isFavorite = false,
-            minLevel = 100,
+            minLevel = minLevel,   -- pakai parameter
             excludeUUIDs = excludeUUIDs,
             limit = 1
         })
         if #results > 0 then
             local petInfo = results[1]
-            -- Jika nama "Cat", pastikan mutasi Blossoming
             if string.lower(name) == "cat" then
                 local catResults = dataPetModule.findPets({
                     exactName = "Cat",
                     isFavorite = false,
-                    minLevel = 100,
+                    minLevel = minLevel,
                     mutation = "Blossoming",
                     excludeUUIDs = excludeUUIDs,
                     limit = 1
@@ -41,7 +42,6 @@ function SharkLogic.findTumbal(dataPetModule, tumbalNames, excludeUUIDs)
     return nil, nil
 end
 
--- Mencari target (non-fav, tanpa Blossoming)
 function SharkLogic.findTarget(dataPetModule, targetName, excludeUUIDs)
     excludeUUIDs = excludeUUIDs or {}
     local results = dataPetModule.findPets({
