@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Main Entry (FINAL - Fixed Stack Overflow)
+-- Pria Solo HUB - Main Entry (FINAL - Selective Unequip)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -66,7 +66,7 @@ local state = {
     currentLevelingTargetUUID = nil,
 }
 
-local isLevelingProcessing = false  -- flag untuk menghindari stack overflow
+local isLevelingProcessing = false
 
 -- ============================================================
 -- EVENT SERVICE
@@ -78,6 +78,35 @@ local PetsService = GameEvents:WaitForChild("PetsService")
 local NotificationEvent = GameEvents:WaitForChild("Notification")
 
 -- ============================================================
+-- FUNGSI UNEQUIP SELEKTIF (hanya unequip yang tidak dipertahankan)
+-- ============================================================
+
+local function unequipAllGardenPets(keepUUIDs)
+    keepUUIDs = keepUUIDs or {}
+    local data = DataPetModule.getAllPets()
+    if not data then return end
+    local equipped = data.PetsData and data.PetsData.EquippedPets
+    if not equipped or type(equipped) ~= "table" then return end
+
+    local keepMap = {}
+    for _, uuid in ipairs(keepUUIDs) do
+        keepMap[uuid] = true
+    end
+
+    local count = 0
+    for _, uuid in ipairs(equipped) do
+        if not keepMap[uuid] then
+            SharkLogic.unequipPet(PetsService, uuid)
+            count = count + 1
+            task.wait(0.05) -- jeda agar tidak overload
+        end
+    end
+    if count > 0 then
+        print("🔄 Unequip " .. count .. " pet (tidak dipertahankan)")
+    end
+end
+
+-- ============================================================
 -- FUNGSI LOGIKA AUTO SHARK
 -- ============================================================
 
@@ -85,13 +114,16 @@ local function unequipTargetAndEquipShark()
     if state.currentTargetUUID then
         SharkLogic.unequipPet(PetsService, state.currentTargetUUID)
         state.currentTargetUUID = nil
+        task.wait(0.05)
     end
     if state.currentTumbalUUID then
         SharkLogic.unequipPet(PetsService, state.currentTumbalUUID)
         state.currentTumbalUUID = nil
+        task.wait(0.05)
     end
     if state.selectedSharkUUID then
         SharkLogic.equipPet(PetsService, state.selectedSharkUUID, SharkLogic.defaultConfig.slotCFrame)
+        task.wait(0.05)
     end
     state.isProcessing = false
 end
@@ -128,8 +160,10 @@ local function unequipSharkAndEquipTumbalTarget()
 
     if tumbalUUID and targetUUID then
         SharkLogic.unequipPet(PetsService, state.selectedSharkUUID)
+        task.wait(0.05)
         SharkLogic.equipPet(PetsService, tumbalUUID, SharkLogic.defaultConfig.slotCFrame)
         state.currentTumbalUUID = tumbalUUID
+        task.wait(0.05)
         SharkLogic.equipPet(PetsService, targetUUID, SharkLogic.defaultConfig.slotCFrame)
         state.currentTargetUUID = targetUUID
         state.isProcessing = true
@@ -142,19 +176,8 @@ local function unequipSharkAndEquipTumbalTarget()
 end
 
 -- ============================================================
--- FUNGSI LOGIKA AUTO LEVELING (dengan anti-stackoverflow)
+-- FUNGSI LOGIKA AUTO LEVELING (dengan jeda anti-freeze)
 -- ============================================================
-
-local function unequipAllGardenPets()
-    local data = DataPetModule.getAllPets()
-    if not data then return end
-    local equipped = data.PetsData and data.PetsData.EquippedPets
-    if equipped and type(equipped) == "table" then
-        for _, uuid in ipairs(equipped) do
-            SharkLogic.unequipPet(PetsService, uuid)
-        end
-    end
-end
 
 local function getPetLevel(uuid)
     local data = DataPetModule.getAllPets()
@@ -170,12 +193,14 @@ local function unequipLevelingTarget()
     if state.currentLevelingTargetUUID then
         SharkLogic.unequipPet(PetsService, state.currentLevelingTargetUUID)
         state.currentLevelingTargetUUID = nil
+        task.wait(0.05)
     end
 end
 
 local function equipLevelingTim()
     for _, uuid in ipairs(state.levelingTim) do
         SharkLogic.equipPet(PetsService, uuid, SharkLogic.defaultConfig.slotCFrame)
+        task.wait(0.05)
     end
 end
 
@@ -204,7 +229,6 @@ local function processLeveling()
             if state.currentLevelingTargetIndex > #state.levelingTargets then
                 state.currentLevelingTargetIndex = 1
             end
-            -- lanjut ke target berikutnya tanpa jeda
             continue
         end
 
@@ -215,7 +239,7 @@ local function processLeveling()
             print("📈 Equip target leveling:", targetUUID, "Level:", currentLevel, "/", state.targetLevel)
         end
 
-        -- Tunggu 2 detik sebelum cek lagi
+        -- Tunggu 2 detik sebelum cek lagi (dengan loop agar bisa diinterupsi)
         for _ = 1, 2 do
             if not state.isLevelingActive then break end
             task.wait(1)
@@ -227,7 +251,6 @@ end
 
 local function startLeveling()
     if isLevelingProcessing then
-        -- hentikan proses yang sedang berjalan
         state.isLevelingActive = false
         task.wait(0.2)
     end
@@ -241,8 +264,10 @@ local function startLeveling()
         return
     end
 
-    unequipAllGardenPets()
-    task.wait(0.5)
+    -- Bersihkan garden, pertahankan hanya tim yang akan di-equip
+    unequipAllGardenPets(state.levelingTim)
+    task.wait(0.2)
+
     equipLevelingTim()
     print("✅ Tim leveling di-equip")
 
@@ -254,14 +279,23 @@ end
 
 local function stopLeveling()
     state.isLevelingActive = false
-    -- Tunggu proses selesai
     while isLevelingProcessing do task.wait(0.1) end
-    unequipLevelingTarget()
+
+    -- Unequip target yang sedang aktif
+    if state.currentLevelingTargetUUID then
+        SharkLogic.unequipPet(PetsService, state.currentLevelingTargetUUID)
+        state.currentLevelingTargetUUID = nil
+        task.wait(0.05)
+    end
+
     -- Unequip semua tim
     for _, uuid in ipairs(state.levelingTim) do
         SharkLogic.unequipPet(PetsService, uuid)
+        task.wait(0.05)
     end
-    unequipAllGardenPets()
+
+    -- Bersihkan semua pet lain di garden (tidak ada yang dipertahankan)
+    unequipAllGardenPets({})
     print("⏹️ Auto Leveling dihentikan, semua pet diunequip.")
 end
 
@@ -693,8 +727,9 @@ SharkToggle = SharkTab:CreateToggle({
                 return
             end
 
-            unequipAllGardenPets()
-            task.wait(0.5)
+            -- Bersihkan garden, pertahankan Mimic & Shark
+            unequipAllGardenPets({state.selectedMimicUUID, state.selectedSharkUUID})
+            task.wait(0.2)
 
             state.isSharkActive = true
             print("▶️ Auto Shark dimulai dengan", #state.targetQueue, "target")
@@ -704,7 +739,8 @@ SharkToggle = SharkTab:CreateToggle({
             state.isSharkActive = false
             print("⏹️ Auto Shark dihentikan")
             unequipTargetAndEquipShark()
-            unequipAllGardenPets()
+            -- Bersihkan semua pet di garden (tidak ada yang dipertahankan)
+            unequipAllGardenPets({})
             if state.selectedMimicUUID then
                 SharkLogic.unequipPet(PetsService, state.selectedMimicUUID)
             end
@@ -747,7 +783,6 @@ local function refreshTimDropdown(filterText)
     table.sort(options, sortAlphabetically)
     if #options == 0 then options = {"❌ Tidak ada pet favorit"} end
     TimDropdown:Refresh(options)
-    -- restore selection
     if #state.levelingTim > 0 then
         local selectedLabels = {}
         for _, uuid in ipairs(state.levelingTim) do
@@ -789,7 +824,6 @@ TimDropdown = LevelingTab:CreateDropdown({
             table.move(state.levelingTim, 1, 7, 1, {})
         end
         print("✅ Tim Leveling dipilih:", #state.levelingTim, "pet")
-        -- Jika sedang aktif, restart
         if state.isLevelingActive and not isLevelingProcessing then
             state.isLevelingActive = false
             task.wait(0.1)
@@ -824,7 +858,6 @@ local function refreshTargetLevelDropdown(filterText)
     table.sort(options, sortAlphabetically)
     if #options == 0 then options = {"❌ Tidak ada pet non-favorit"} end
     TargetLevelDropdown:Refresh(options)
-    -- restore selection
     if #state.levelingTargets > 0 then
         local selectedLabels = {}
         for _, uuid in ipairs(state.levelingTargets) do
@@ -863,7 +896,6 @@ TargetLevelDropdown = LevelingTab:CreateDropdown({
         end
         state.currentLevelingTargetIndex = 1
         print("✅ Target Leveling dipilih:", #state.levelingTargets, "pet")
-        -- Jika sedang aktif, restart
         if state.isLevelingActive and not isLevelingProcessing then
             state.isLevelingActive = false
             task.wait(0.1)
@@ -951,7 +983,7 @@ local function saveLoadTab()
             if state.isSharkActive then
                 state.isSharkActive = false
                 unequipTargetAndEquipShark()
-                unequipAllGardenPets()
+                unequipAllGardenPets({})
                 if state.selectedMimicUUID then
                     SharkLogic.unequipPet(PetsService, state.selectedMimicUUID)
                 end
