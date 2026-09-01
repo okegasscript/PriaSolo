@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Main Entry (FINAL)
+-- Pria Solo HUB - Main Entry (FINAL - Fixed Stack Overflow)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -65,6 +65,8 @@ local state = {
     currentLevelingTargetIndex = 1,
     currentLevelingTargetUUID = nil,
 }
+
+local isLevelingProcessing = false  -- flag untuk menghindari stack overflow
 
 -- ============================================================
 -- EVENT SERVICE
@@ -140,7 +142,7 @@ local function unequipSharkAndEquipTumbalTarget()
 end
 
 -- ============================================================
--- FUNGSI LOGIKA AUTO LEVELING
+-- FUNGSI LOGIKA AUTO LEVELING (dengan anti-stackoverflow)
 -- ============================================================
 
 local function unequipAllGardenPets()
@@ -178,46 +180,58 @@ local function equipLevelingTim()
 end
 
 local function processLeveling()
-    if not state.isLevelingActive then return end
+    if not state.isLevelingActive or isLevelingProcessing then return end
+    isLevelingProcessing = true
 
-    if #state.levelingTargets == 0 then
-        print("✅ Semua target selesai")
-        state.isLevelingActive = false
-        return
-    end
-
-    local targetUUID = state.levelingTargets[state.currentLevelingTargetIndex]
-    if not targetUUID then
-        state.currentLevelingTargetIndex = 1
-        targetUUID = state.levelingTargets[1]
-    end
-
-    local currentLevel = getPetLevel(targetUUID)
-    if currentLevel >= state.targetLevel then
-        print("✅ Target sudah mencapai level", state.targetLevel, "- lewati")
-        unequipLevelingTarget()
-        state.currentLevelingTargetIndex = state.currentLevelingTargetIndex + 1
-        if state.currentLevelingTargetIndex > #state.levelingTargets then
-            state.currentLevelingTargetIndex = 1
+    while state.isLevelingActive do
+        if #state.levelingTargets == 0 then
+            print("✅ Semua target selesai")
+            state.isLevelingActive = false
+            break
         end
-        task.spawn(processLeveling)
-        return
+
+        local targetUUID = state.levelingTargets[state.currentLevelingTargetIndex]
+        if not targetUUID then
+            state.currentLevelingTargetIndex = 1
+            targetUUID = state.levelingTargets[1]
+        end
+
+        local currentLevel = getPetLevel(targetUUID)
+        if currentLevel >= state.targetLevel then
+            print("✅ Target sudah mencapai level", state.targetLevel, "- lewati")
+            unequipLevelingTarget()
+            state.currentLevelingTargetIndex = state.currentLevelingTargetIndex + 1
+            if state.currentLevelingTargetIndex > #state.levelingTargets then
+                state.currentLevelingTargetIndex = 1
+            end
+            -- lanjut ke target berikutnya tanpa jeda
+            continue
+        end
+
+        if state.currentLevelingTargetUUID ~= targetUUID then
+            unequipLevelingTarget()
+            SharkLogic.equipPet(PetsService, targetUUID, SharkLogic.defaultConfig.slotCFrame)
+            state.currentLevelingTargetUUID = targetUUID
+            print("📈 Equip target leveling:", targetUUID, "Level:", currentLevel, "/", state.targetLevel)
+        end
+
+        -- Tunggu 2 detik sebelum cek lagi
+        for _ = 1, 2 do
+            if not state.isLevelingActive then break end
+            task.wait(1)
+        end
     end
 
-    if state.currentLevelingTargetUUID ~= targetUUID then
-        unequipLevelingTarget()
-        SharkLogic.equipPet(PetsService, targetUUID, SharkLogic.defaultConfig.slotCFrame)
-        state.currentLevelingTargetUUID = targetUUID
-        print("📈 Equip target leveling:", targetUUID, "Level:", currentLevel, "/", state.targetLevel)
-    end
-
-    task.wait(2)
-    if state.isLevelingActive then
-        processLeveling()
-    end
+    isLevelingProcessing = false
 end
 
 local function startLeveling()
+    if isLevelingProcessing then
+        -- hentikan proses yang sedang berjalan
+        state.isLevelingActive = false
+        task.wait(0.2)
+    end
+
     if #state.levelingTim == 0 then
         print("⚠️ Tim leveling kosong!")
         return
@@ -235,21 +249,18 @@ local function startLeveling()
     state.currentLevelingTargetIndex = 1
     state.isLevelingActive = true
     print("▶️ Auto Leveling dimulai")
-    processLeveling()
+    task.spawn(processLeveling)
 end
 
 local function stopLeveling()
     state.isLevelingActive = false
-    -- Unequip target yang sedang aktif
-    if state.currentLevelingTargetUUID then
-        SharkLogic.unequipPet(PetsService, state.currentLevelingTargetUUID)
-        state.currentLevelingTargetUUID = nil
-    end
-    -- Unequip semua tim secara eksplisit
+    -- Tunggu proses selesai
+    while isLevelingProcessing do task.wait(0.1) end
+    unequipLevelingTarget()
+    -- Unequip semua tim
     for _, uuid in ipairs(state.levelingTim) do
         SharkLogic.unequipPet(PetsService, uuid)
     end
-    -- Bersihkan semua pet yang tersisa di garden (jaga-jaga)
     unequipAllGardenPets()
     print("⏹️ Auto Leveling dihentikan, semua pet diunequip.")
 end
@@ -711,7 +722,7 @@ SharkToggle = SharkTab:CreateToggle({
 local LevelingTab = Window:CreateTab("Auto Leveling")
 
 -- ============================================================
--- DROPDOWN TIM LEVELING (Favorit, max 7) dengan restart
+-- DROPDOWN TIM LEVELING (Favorit, max 7)
 -- ============================================================
 
 local timLabelToUUID = {}
@@ -720,7 +731,6 @@ local TimFilterInput
 
 local function refreshTimDropdown(filterText)
     filterText = filterText or (TimFilterInput and TimFilterInput:Get() or "")
-    local currentTim = state.levelingTim
     local hasil = DataPetModule.findPets({ isFavorite = true })
     local options = {}
     timLabelToUUID = {}
@@ -737,9 +747,10 @@ local function refreshTimDropdown(filterText)
     table.sort(options, sortAlphabetically)
     if #options == 0 then options = {"❌ Tidak ada pet favorit"} end
     TimDropdown:Refresh(options)
-    if #currentTim > 0 then
+    -- restore selection
+    if #state.levelingTim > 0 then
         local selectedLabels = {}
-        for _, uuid in ipairs(currentTim) do
+        for _, uuid in ipairs(state.levelingTim) do
             for label, u in pairs(timLabelToUUID) do
                 if u == uuid then
                     table.insert(selectedLabels, label)
@@ -778,8 +789,8 @@ TimDropdown = LevelingTab:CreateDropdown({
             table.move(state.levelingTim, 1, 7, 1, {})
         end
         print("✅ Tim Leveling dipilih:", #state.levelingTim, "pet")
-        -- Jika leveling sedang aktif, restart proses
-        if state.isLevelingActive then
+        -- Jika sedang aktif, restart
+        if state.isLevelingActive and not isLevelingProcessing then
             state.isLevelingActive = false
             task.wait(0.1)
             startLeveling()
@@ -788,7 +799,7 @@ TimDropdown = LevelingTab:CreateDropdown({
 })
 
 -- ============================================================
--- DROPDOWN TARGET LEVELING (Non-Favorit) dengan restart
+-- DROPDOWN TARGET LEVELING (Non-Favorit)
 -- ============================================================
 
 local targetLevelLabelToUUID = {}
@@ -797,7 +808,6 @@ local TargetLevelFilterInput
 
 local function refreshTargetLevelDropdown(filterText)
     filterText = filterText or (TargetLevelFilterInput and TargetLevelFilterInput:Get() or "")
-    local currentTargets = state.levelingTargets
     local hasil = DataPetModule.findPets({ isFavorite = false })
     local options = {}
     targetLevelLabelToUUID = {}
@@ -814,9 +824,10 @@ local function refreshTargetLevelDropdown(filterText)
     table.sort(options, sortAlphabetically)
     if #options == 0 then options = {"❌ Tidak ada pet non-favorit"} end
     TargetLevelDropdown:Refresh(options)
-    if #currentTargets > 0 then
+    -- restore selection
+    if #state.levelingTargets > 0 then
         local selectedLabels = {}
-        for _, uuid in ipairs(currentTargets) do
+        for _, uuid in ipairs(state.levelingTargets) do
             for label, u in pairs(targetLevelLabelToUUID) do
                 if u == uuid then
                     table.insert(selectedLabels, label)
@@ -852,8 +863,8 @@ TargetLevelDropdown = LevelingTab:CreateDropdown({
         end
         state.currentLevelingTargetIndex = 1
         print("✅ Target Leveling dipilih:", #state.levelingTargets, "pet")
-        -- Jika leveling sedang aktif, restart proses
-        if state.isLevelingActive then
+        -- Jika sedang aktif, restart
+        if state.isLevelingActive and not isLevelingProcessing then
             state.isLevelingActive = false
             task.wait(0.1)
             startLeveling()
@@ -874,8 +885,7 @@ local TargetLevelSlider = LevelingTab:CreateSlider({
     Callback = function(value)
         state.targetLevel = value
         print("🎯 Target Level:", value)
-        -- Jika leveling aktif, restart agar target level baru diterapkan
-        if state.isLevelingActive then
+        if state.isLevelingActive and not isLevelingProcessing then
             state.isLevelingActive = false
             task.wait(0.1)
             startLeveling()
@@ -911,7 +921,6 @@ LevelingToggle = LevelingTab:CreateToggle({
             startLeveling()
         else
             stopLeveling()
-            -- Pastikan toggle di UI mati (jika ada state)
             if LevelingToggle then LevelingToggle:Set(false) end
         end
     end
@@ -941,7 +950,7 @@ local function saveLoadTab()
         Callback = function()
             if state.isSharkActive then
                 state.isSharkActive = false
-                uneipTargetAndEquipShark()
+                unequipTargetAndEquipShark()
                 unequipAllGardenPets()
                 if state.selectedMimicUUID then
                     SharkLogic.unequipPet(PetsService, state.selectedMimicUUID)
