@@ -1,12 +1,12 @@
 -- ============================================================
--- Auto Shark - Main Entry (FINAL - Two Tabs)
+-- Auto Shark - Main Entry (FINAL)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 
--- Load modul
+-- Load modul (gunakan raw URL yang benar)
 local DataPetModule = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua"))()
 local SharkLogic = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/SharkLogic.lua"))()
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
