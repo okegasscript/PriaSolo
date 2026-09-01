@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - FINAL (Perbaikan method Rayfield v1)
+-- Pria Solo HUB - FINAL (PNP tanpa print, CFrame default)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -338,7 +338,7 @@ local function stopLeveling()
 end
 
 -- ============================================================
--- FUNGSI LOGIKA PNP (tanpa print, CFrame default)
+-- FUNGSI LOGIKA PNP (tanpa print console, CFrame default)
 -- ============================================================
 
 local function pnpProcessPet(uuid)
@@ -350,9 +350,11 @@ local function pnpProcessPet(uuid)
 
     task.wait(pickupDelay)
     SharkLogic.unequipPet(PetsService, uuid)
+    -- no print
 
     task.wait(placeDelay)
-    SharkLogic.equipPet(PetsService, uuid, SharkLogic.defaultConfig.slotCFrame)
+    SharkLogic.equipPet(PetsService, uuid, SharkLogic.defaultConfig.slotCFrame)  -- menggunakan CFrame default
+    -- no print
 
     state.pnpProcessing[uuid] = false
 end
@@ -420,10 +422,110 @@ NotificationEvent.OnClientEvent:Connect(function(message)
 end)
 
 -- ============================================================
+-- SAVE / LOAD
+-- ============================================================
+
+local function saveConfig()
+    local config = {
+        selectedMimicUUID = state.selectedMimicUUID,
+        selectedSharkUUID = state.selectedSharkUUID,
+        targetQueue = state.targetQueue,
+        tumbalNames = state.tumbalNames,
+        minLevel = state.minLevel,
+        levelingTim = state.levelingTim,
+        levelingTargets = state.levelingTargets,
+        targetLevel = state.targetLevel,
+        pnpPets = state.pnpPets,
+        pnpPickupDelay = state.pnpPickupDelay,
+        pnpPlaceDelay = state.pnpPlaceDelay,
+        timestamp = os.time()
+    }
+    local json = HttpService:JSONEncode(config)
+    local success, err = pcall(function()
+        writefile(CONFIG_FILE, json)
+    end)
+    if success then
+        print("✅ Konfigurasi disimpan ke " .. CONFIG_FILE)
+    else
+        warn("❌ Gagal menyimpan: " .. tostring(err))
+    end
+end
+
+local function loadConfig()
+    local success, data = pcall(function()
+        return readfile(CONFIG_FILE)
+    end)
+    if not success then
+        print("ℹ️ File konfigurasi tidak ditemukan, gunakan default.")
+        return
+    end
+    local decoded = HttpService:JSONDecode(data)
+    if decoded then
+        state.selectedMimicUUID = decoded.selectedMimicUUID
+        state.selectedSharkUUID = decoded.selectedSharkUUID
+        state.targetQueue = decoded.targetQueue or {}
+        state.tumbalNames = decoded.tumbalNames or {"Dog"}
+        state.minLevel = decoded.minLevel or 100
+        state.levelingTim = decoded.levelingTim or {}
+        state.levelingTargets = decoded.levelingTargets or {}
+        state.targetLevel = decoded.targetLevel or 100
+        state.pnpPets = decoded.pnpPets or {}
+        state.pnpPickupDelay = decoded.pnpPickupDelay or 0.6
+        state.pnpPlaceDelay = decoded.pnpPlaceDelay or 0
+        print("✅ Konfigurasi dimuat dari " .. CONFIG_FILE)
+        refreshAllUI()
+    else
+        warn("❌ Gagal memuat file.")
+    end
+end
+
+local function resetAllSettings()
+    -- Matikan semua proses
+    if state.isSharkActive then
+        state.isSharkActive = false
+        unequipTargetAndEquipShark()
+        unequipAllGardenPets({}, 1.0)
+        if state.selectedMimicUUID then
+            SharkLogic.unequipPet(PetsService, state.selectedMimicUUID)
+        end
+        if state.selectedSharkUUID then
+            SharkLogic.unequipPet(PetsService, state.selectedSharkUUID)
+        end
+        if SharkToggle then SharkToggle:Set(false) end
+    end
+    if state.isLevelingActive then
+        stopLeveling()
+        if LevelingToggle then LevelingToggle:Set(false) end
+    end
+    if state.pnpActive then
+        state.pnpActive = false
+        for uuid, _ in pairs(state.pnpProcessing) do
+            state.pnpProcessing[uuid] = false
+        end
+        if PnpToggle then PnpToggle:Set(false) end
+    end
+
+    -- Reset state
+    state.selectedMimicUUID = nil
+    state.selectedSharkUUID = nil
+    state.targetQueue = {}
+    state.levelingTim = {}
+    state.levelingTargets = {}
+    state.pnpPets = {}
+    state.tumbalNames = {"Dog"}
+    state.minLevel = 100
+    state.targetLevel = 100
+    state.pnpPickupDelay = 0.6
+    state.pnpPlaceDelay = 0
+
+    refreshAllUI()
+    print("🔄 Semua pengaturan direset ke default.")
+end
+
+-- ============================================================
 -- DEKLARASI VARIABEL UI
 -- ============================================================
 
-local Window
 local StatusLabel
 local TumbalInput, MinLevelSlider, TargetLevelSlider
 local SharkToggle, LevelingToggle, PnpToggle
@@ -432,7 +534,7 @@ local TimDropdown, TargetLevelDropdown
 local PnpDropdown
 
 -- ============================================================
--- FUNGSI REFRESH (dengan method Rayfield v1 yang benar)
+-- FUNGSI REFRESH
 -- ============================================================
 
 local function updateStatusLabel()
@@ -665,7 +767,7 @@ local function refreshPnpDropdown(filterText)
 end
 
 -- ============================================================
--- REFRESH ALL UI (dengan method yang benar)
+-- REFRESH ALL UI
 -- ============================================================
 
 local function refreshAllUI()
@@ -676,139 +778,40 @@ local function refreshAllUI()
     refreshTargetLevelDropdown()
     refreshPnpDropdown()
     updateStatusLabel()
-
-    -- Update input values dengan method yang benar di Rayfield v1
     if TumbalInput then
-        TumbalInput:Set(table.concat(state.tumbalNames, ", "))  -- Set untuk Input
+        TumbalInput:Set(table.concat(state.tumbalNames, ", "))
     end
     if MinLevelSlider then
-        MinLevelSlider:SetValue(state.minLevel)  -- SetValue untuk Slider
+        MinLevelSlider:Set(state.minLevel)
     end
     if TargetLevelSlider then
-        TargetLevelSlider:SetValue(state.targetLevel)  -- SetValue untuk Slider
+        TargetLevelSlider:Set(state.targetLevel)
     end
 end
 
 -- ============================================================
--- SAVE / LOAD (sekarang refreshAllUI sudah benar)
+-- UI (Rayfield)
 -- ============================================================
 
-local function saveConfig()
-    local config = {
-        selectedMimicUUID = state.selectedMimicUUID,
-        selectedSharkUUID = state.selectedSharkUUID,
-        targetQueue = state.targetQueue,
-        tumbalNames = state.tumbalNames,
-        minLevel = state.minLevel,
-        levelingTim = state.levelingTim,
-        levelingTargets = state.levelingTargets,
-        targetLevel = state.targetLevel,
-        pnpPets = state.pnpPets,
-        pnpPickupDelay = state.pnpPickupDelay,
-        pnpPlaceDelay = state.pnpPlaceDelay,
-        timestamp = os.time()
-    }
-    local json = HttpService:JSONEncode(config)
-    local success, err = pcall(function()
-        writefile(CONFIG_FILE, json)
-    end)
-    if success then
-        print("✅ Konfigurasi disimpan ke " .. CONFIG_FILE)
-    else
-        warn("❌ Gagal menyimpan: " .. tostring(err))
-    end
-end
-
-local function loadConfig()
-    local success, data = pcall(function()
-        return readfile(CONFIG_FILE)
-    end)
-    if not success then
-        print("ℹ️ File konfigurasi tidak ditemukan, gunakan default.")
-        return
-    end
-    local decoded = HttpService:JSONDecode(data)
-    if decoded then
-        state.selectedMimicUUID = decoded.selectedMimicUUID
-        state.selectedSharkUUID = decoded.selectedSharkUUID
-        state.targetQueue = decoded.targetQueue or {}
-        state.tumbalNames = decoded.tumbalNames or {"Dog"}
-        state.minLevel = decoded.minLevel or 100
-        state.levelingTim = decoded.levelingTim or {}
-        state.levelingTargets = decoded.levelingTargets or {}
-        state.targetLevel = decoded.targetLevel or 100
-        state.pnpPets = decoded.pnpPets or {}
-        state.pnpPickupDelay = decoded.pnpPickupDelay or 0.6
-        state.pnpPlaceDelay = decoded.pnpPlaceDelay or 0
-        print("✅ Konfigurasi dimuat dari " .. CONFIG_FILE)
-        refreshAllUI()
-    else
-        warn("❌ Gagal memuat file.")
-    end
-end
-
-local function resetAllSettings()
-    if state.isSharkActive then
-        state.isSharkActive = false
-        unequipTargetAndEquipShark()
-        unequipAllGardenPets({}, 1.0)
-        if state.selectedMimicUUID then
-            SharkLogic.unequipPet(PetsService, state.selectedMimicUUID)
-        end
-        if state.selectedSharkUUID then
-            SharkLogic.unequipPet(PetsService, state.selectedSharkUUID)
-        end
-        if SharkToggle then SharkToggle:Set(false) end
-    end
-    if state.isLevelingActive then
-        stopLeveling()
-        if LevelingToggle then LevelingToggle:Set(false) end
-    end
-    if state.pnpActive then
-        state.pnpActive = false
-        for uuid, _ in pairs(state.pnpProcessing) do
-            state.pnpProcessing[uuid] = false
-        end
-        if PnpToggle then PnpToggle:Set(false) end
-    end
-
-    state.selectedMimicUUID = nil
-    state.selectedSharkUUID = nil
-    state.targetQueue = {}
-    state.levelingTim = {}
-    state.levelingTargets = {}
-    state.pnpPets = {}
-    state.tumbalNames = {"Dog"}
-    state.minLevel = 100
-    state.targetLevel = 100
-    state.pnpPickupDelay = 0.6
-    state.pnpPlaceDelay = 0
-
-    refreshAllUI()
-    print("🔄 Semua pengaturan direset ke default.")
-end
-
--- ============================================================
--- UI (Rayfield v1)
--- ============================================================
-
-Window = Rayfield:CreateWindow({
+local Window = Rayfield:CreateWindow({
     Name = "Pria Solo HUB",
+    LoadingTitle = "Memuat...",
+    LoadingSubtitle = "by PriaSolo",
     ConfigurationSaving = {
-        Enabled = false, -- kita pakai save manual lewat writefile
+        Enabled = true,
         FolderName = "PriaSolo",
         FileName = "Settings"
     },
     Key = Enum.KeyCode.K,
-    AutoLoadConfig = false,
-    AutoSaveConfig = false
+    AutoLoadConfig = true,
+    AutoSaveConfig = true
 })
 
 -- ============================================================
 -- TAB 1: AUTO SHARK
 -- ============================================================
 
-local SharkTab = Window:CreateTab("Auto Shark", nil)
+local SharkTab = Window:CreateTab("Auto Shark")
 
 StatusLabel = SharkTab:CreateLabel("Mimic: (belum) | Shark: (belum) | Target: 0 terpilih")
 
@@ -941,22 +944,22 @@ SharkToggle = SharkTab:CreateToggle({
         if Value then
             if state.isLevelingActive then
                 print("⚠️ Auto Leveling sedang aktif! Matikan dulu.")
-                SharkToggle:Set(false)
+                if SharkToggle then SharkToggle:Set(false) end
                 return
             end
             if not state.selectedMimicUUID then
                 print("⚠️ Pilih Mimic dulu!")
-                SharkToggle:Set(false)
+                if SharkToggle then SharkToggle:Set(false) end
                 return
             end
             if not state.selectedSharkUUID then
                 print("⚠️ Pilih Shark dulu!")
-                SharkToggle:Set(false)
+                if SharkToggle then SharkToggle:Set(false) end
                 return
             end
             if #state.targetQueue == 0 then
                 print("⚠️ Pilih target dulu (multiple)!")
-                SharkToggle:Set(false)
+                if SharkToggle then SharkToggle:Set(false) end
                 return
             end
 
@@ -986,7 +989,7 @@ SharkToggle = SharkTab:CreateToggle({
 -- TAB 2: AUTO LEVELING
 -- ============================================================
 
-local LevelingTab = Window:CreateTab("Auto Leveling", nil)
+local LevelingTab = Window:CreateTab("Auto Leveling")
 
 LevelingTab:CreateInput({
     Name = "🔍 Cari Tim",
@@ -1077,23 +1080,23 @@ LevelingToggle = LevelingTab:CreateToggle({
         if Value then
             if state.isSharkActive then
                 print("⚠️ Auto Shark sedang aktif! Matikan dulu.")
-                LevelingToggle:Set(false)
+                if LevelingToggle then LevelingToggle:Set(false) end
                 return
             end
             if #state.levelingTim == 0 then
                 print("⚠️ Pilih Tim Leveling dulu!")
-                LevelingToggle:Set(false)
+                if LevelingToggle then LevelingToggle:Set(false) end
                 return
             end
             if #state.levelingTargets == 0 then
                 print("⚠️ Pilih Target Leveling dulu!")
-                LevelingToggle:Set(false)
+                if LevelingToggle then LevelingToggle:Set(false) end
                 return
             end
             startLeveling()
         else
             stopLeveling()
-            LevelingToggle:Set(false)
+            if LevelingToggle then LevelingToggle:Set(false) end
         end
     end
 })
@@ -1102,7 +1105,7 @@ LevelingToggle = LevelingTab:CreateToggle({
 -- TAB 3: PNP
 -- ============================================================
 
-local PnpTab = Window:CreateTab("PNP", nil)
+local PnpTab = Window:CreateTab("PNP")
 
 PnpTab:CreateInput({
     Name = "🔍 Cari Pet",
@@ -1173,7 +1176,7 @@ PnpToggle = PnpTab:CreateToggle({
         if Value then
             if #state.pnpPets == 0 then
                 print("⚠️ Pilih pet dulu!")
-                PnpToggle:Set(false)
+                if PnpToggle then PnpToggle:Set(false) end
                 return
             end
             state.pnpActive = true
@@ -1192,7 +1195,7 @@ PnpToggle = PnpTab:CreateToggle({
 -- TAB 4: PENGATURAN
 -- ============================================================
 
-local SettingsTab = Window:CreateTab("Pengaturan", nil)
+local SettingsTab = Window:CreateTab("Pengaturan")
 
 SettingsTab:CreateButton({
     Name = "💾 Simpan Konfigurasi",
@@ -1210,9 +1213,9 @@ SettingsTab:CreateButton({
 })
 
 -- ============================================================
--- INISIALISASI AWAL
+-- INISIALISASI
 -- ============================================================
 
 refreshAllUI()
 
-print("✅ Pria Solo HUB siap (Rayfield v1). Tekan K untuk membuka UI.")
+print("✅ Pria Solo HUB siap. Tekan K untuk membuka UI.")
