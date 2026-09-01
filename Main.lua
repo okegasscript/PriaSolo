@@ -1,28 +1,243 @@
 -- ============================================================
--- Auto Shark - Main Entry (FINAL)
+-- Auto Shark - Main Entry (FINAL dengan fallback)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 
--- Load modul (gunakan raw URL yang benar)
-local DataPetModule = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua"))()
-local SharkLogic = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/SharkLogic.lua"))()
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+-- ============================================================
+-- FUNGSI UNTUK MENDAPATKAN DATA PET (FALLBACK)
+-- ============================================================
 
-if not DataPetModule or not SharkLogic or not Rayfield then
-    warn("❌ Gagal memuat modul")
-    return
+local function getFallbackDataPetModule()
+    -- Coba ambil DataService langsung
+    local DataService = nil
+    local success, ds = pcall(function()
+        return require(ReplicatedStorage.Modules.DataService)
+    end)
+    if success and ds then DataService = ds end
+
+    if not DataService then
+        -- Coba cari di tempat lain
+        local modules = ReplicatedStorage:FindFirstChild("Modules")
+        if modules then
+            local dsMod = modules:FindFirstChild("DataService")
+            if dsMod then
+                success, ds = pcall(require, dsMod)
+                if success and ds then DataService = ds end
+            end
+        end
+    end
+
+    if not DataService then
+        -- Coba dari _G
+        if _G.DataService then DataService = _G.DataService end
+    end
+
+    if not DataService then
+        return nil, "DataService tidak ditemukan di ReplicatedStorage.Modules atau _G"
+    end
+
+    -- Buat module sederhana dengan fungsi dasar
+    local FallbackModule = {}
+
+    function FallbackModule.getAllPets()
+        local data = DataService:GetData()
+        if not data then return {} end
+        local inv = data.PetsData and data.PetsData.PetInventory and data.PetsData.PetInventory.Data
+        return inv or {}
+    end
+
+    function FallbackModule.getEquippedPets()
+        local data = DataService:GetData()
+        if not data then return {} end
+        return data.PetsData and data.PetsData.EquippedPets or {}
+    end
+
+    -- Mapping mutasi
+    local MUTATION_MAP = {
+        ["@"] = "Blossoming",
+        ["J"] = "Oxpecker",
+        ["IN"] = "Inferno",
+        ["X"] = "Venom",
+        ["EM"] = "Ember",
+        ["EV"] = "Everchanted",
+        ["O"] = "Forger",
+        ["A"] = "Nightmare",
+        ["N"] = "Lion",
+        ["i"] = "Mega",
+        ["TS"] = "Transcendent",
+        ["Normal"] = "Normal",
+    }
+
+    function FallbackModule.getAutoMutationName(rawCode)
+        if not rawCode or rawCode == "" then rawCode = "Normal" end
+        return MUTATION_MAP[rawCode] or rawCode
+    end
+
+    function FallbackModule.findPets(filter)
+        filter = filter or {}
+        local allPets = FallbackModule.getAllPets()
+        local results = {}
+        for uuid, pet in pairs(allPets) do
+            local pData = pet.PetData or {}
+            local pType = pet.PetType or pData.PetType or pData.Name or "Unknown"
+            local name = pType
+            local mutationRaw = pData.MutationType or "Normal"
+            local mutation = FallbackModule.getAutoMutationName(mutationRaw)
+            local level = pData.Level or pData.Lvl or 0
+            local weight = pData.Weight or 0
+            local isFavorite = pData.IsFavorite or false
+            local passive = pData.Passive or ""
+
+            -- Cek filter
+            local match = true
+            if filter.name and not string.find(string.lower(name), string.lower(filter.name)) then match = false end
+            if filter.exactName and string.lower(name) ~= string.lower(filter.exactName) then match = false end
+            if filter.type and string.lower(pType) ~= string.lower(filter.type) then match = false end
+            if filter.mutation and string.lower(mutation) ~= string.lower(filter.mutation) then match = false end
+            if filter.isFavorite ~= nil and isFavorite ~= filter.isFavorite then match = false end
+            if filter.minLevel and level < filter.minLevel then match = false end
+            if filter.maxLevel and level > filter.maxLevel then match = false end
+            if filter.minWeight and weight < filter.minWeight then match = false end
+            if filter.maxWeight and weight > filter.maxWeight then match = false end
+            if filter.excludeUUIDs then
+                for _, ex in ipairs(filter.excludeUUIDs) do
+                    if ex == uuid then match = false break end
+                end
+            end
+            if match then
+                table.insert(results, {
+                    uuid = uuid,
+                    pet = pet,
+                    petData = pData,
+                    name = name,
+                    mutation = mutation,
+                    level = level,
+                    weight = weight,
+                    isFavorite = isFavorite,
+                    passive = passive
+                })
+            end
+        end
+        if filter.limit then
+            local limited = {}
+            for i = 1, math.min(filter.limit, #results) do
+                limited[i] = results[i]
+            end
+            return limited
+        end
+        return results
+    end
+
+    return FallbackModule, nil
 end
 
-print("✅ Semua modul berhasil dimuat")
+-- ============================================================
+-- LOAD DataPetModule (dengan fallback)
+-- ============================================================
+
+local DataPetModule = nil
+local loadError = nil
+
+-- Coba load dari GitHub
+local success, module = pcall(function()
+    local raw = game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua")
+    return loadstring(raw)()
+end)
+
+if success and module then
+    DataPetModule = module
+    print("✅ DataPetModule dari GitHub berhasil dimuat")
+else
+    print("⚠️ Gagal load dari GitHub, menggunakan fallback...")
+    DataPetModule, loadError = getFallbackDataPetModule()
+    if not DataPetModule then
+        warn("❌ Fallback juga gagal:", loadError)
+        return
+    end
+    print("✅ DataPetModule fallback berhasil dimuat")
+end
+
+-- ============================================================
+-- LOAD SharkLogic (dengan fallback)
+-- ============================================================
+
+local SharkLogic = nil
+local sharkSuccess, sharkModule = pcall(function()
+    local raw = game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/SharkLogic.lua")
+    return loadstring(raw)()
+end)
+
+if sharkSuccess and sharkModule then
+    SharkLogic = sharkModule
+    print("✅ SharkLogic dari GitHub berhasil dimuat")
+else
+    -- Fallback sederhana
+    SharkLogic = {
+        defaultConfig = {
+            slotCFrame = CFrame.new(-13.018989562988, 0, -74.922821044922, 1,0,0,0,1,0,0,0,1)
+        },
+        findTumbal = function(dp, names, ex, minLvl)
+            minLvl = minLvl or 0
+            ex = ex or {}
+            for _, name in ipairs(names) do
+                local results = dp.findPets({
+                    exactName = name,
+                    isFavorite = false,
+                    minLevel = minLvl,
+                    excludeUUIDs = ex,
+                    limit = 10
+                })
+                for _, info in ipairs(results) do
+                    if info.mutation == "Blossoming" then
+                        return info.uuid
+                    end
+                end
+            end
+            return nil
+        end,
+        findTarget = function(dp, targetName, ex)
+            ex = ex or {}
+            local results = dp.findPets({
+                exactName = targetName,
+                isFavorite = false,
+                excludeUUIDs = ex,
+                limit = 1
+            })
+            if #results > 0 then
+                local info = results[1]
+                if info.mutation ~= "Blossoming" then
+                    return info.uuid
+                end
+            end
+            return nil
+        end,
+        equipPet = function(ps, uuid, cframe)
+            if uuid then ps:FireServer("EquipPet", uuid, cframe) end
+        end,
+        unequipPet = function(ps, uuid)
+            if uuid then ps:FireServer("UnequipPet", uuid) end
+        end
+    }
+    print("✅ SharkLogic fallback berhasil dimuat")
+end
+
+-- ============================================================
+-- LOAD Rayfield
+-- ============================================================
+
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+if not Rayfield then
+    warn("❌ Gagal memuat Rayfield")
+    return
+end
 
 -- ============================================================
 -- FUNGSI BANTUAN
 -- ============================================================
 
--- Format label pet: Mutasi Nama Berat KG Lv.Level
 local function formatPetLabel(pet)
     local mut = pet.mutation or "Normal"
     local name = pet.name or "Unknown"
@@ -36,7 +251,6 @@ end
 -- ============================================================
 
 local state = {
-    -- Auto Shark
     isActive = false,
     isProcessing = false,
     selectedMimicUUID = nil,
@@ -50,7 +264,6 @@ local state = {
     cycleCount = 0,
     lastActionTime = 0,
 
-    -- Auto Leveling
     isLevelingActive = false,
     levelingTim = {},
     levelingTargets = {},
@@ -313,7 +526,7 @@ local function updateStatusLabel()
     StatusLabel:Set("Mimic: " .. mimicText .. " | Shark: " .. sharkText .. " | Target: " .. targetCount .. " terpilih")
 end
 
--- Dropdown Mimic (Favorit, mengandung "Mimic")
+-- Dropdown Mimic
 local mimicLabelToUUID = {}
 local MimicDropdown = SharkTab:CreateDropdown({
     Name = "Pilih Mimic",
@@ -345,7 +558,7 @@ local function refreshMimicDropdown()
     MimicDropdown:Refresh(options)
 end
 
--- Dropdown Shark (Favorit, mengandung "Shark")
+-- Dropdown Shark
 local sharkLabelToUUID = {}
 local SharkDropdown = SharkTab:CreateDropdown({
     Name = "Pilih Shark",
@@ -415,7 +628,7 @@ local function refreshTargetDropdown()
     TargetDropdown:Refresh(options)
 end
 
--- Input Tumbal (dengan spasi)
+-- Input Tumbal
 SharkTab:CreateInput({
     Name = "Nama Tumbal (pisah koma)",
     PlaceholderText = "Contoh: Dog, Golden Lab, Black Bunny",
@@ -504,7 +717,7 @@ SharkToggle = SharkTab:CreateToggle({
 
 local LevelingTab = Window:CreateTab("Auto Leveling")
 
--- Tim Leveling (Multiple, max 7, isFavorite=true)
+-- Tim Leveling
 local timLabelToUUID = {}
 local TimDropdown = LevelingTab:CreateDropdown({
     Name = "Tim Leveling (Max 7, Favorit)",
@@ -539,7 +752,7 @@ local function refreshTimDropdown()
     TimDropdown:Refresh(options)
 end
 
--- Target Leveling (Multiple, isFavorite=false)
+-- Target Leveling
 local targetLevelLabelToUUID = {}
 local TargetLevelDropdown = LevelingTab:CreateDropdown({
     Name = "Target Leveling (Non-Favorit)",
