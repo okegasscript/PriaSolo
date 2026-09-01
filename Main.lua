@@ -1,5 +1,5 @@
 -- ============================================================
--- Auto Shark - Main Entry (FINAL - Multiple Target Queue)
+-- Auto Shark - Main Entry (FINAL - Target Semua Pet, Tumbal Spasi)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -28,7 +28,7 @@ local state = {
     selectedMimicUUID = nil,
     selectedSharkUUID = nil,
     targetQueue = {},          -- daftar UUID target (multiple)
-    currentTargetIndex = 1,    -- indeks target yang sedang diproses
+    currentTargetIndex = 1,
     tumbalNames = {"Dog"},
     minLevel = 100,
     currentTumbalUUID = nil,
@@ -71,10 +71,9 @@ local function getNextTarget()
         return nil
     end
     local target = state.targetQueue[state.currentTargetIndex]
-    -- Maju ke target berikutnya (cycle)
     state.currentTargetIndex = state.currentTargetIndex + 1
     if state.currentTargetIndex > #state.targetQueue then
-        state.currentTargetIndex = 1  -- loop kembali ke awal
+        state.currentTargetIndex = 1
     end
     return target
 end
@@ -290,7 +289,7 @@ local function refreshSharkDropdown()
 end
 
 -- ============================================================
--- DROPDOWN TARGET (Multiple Select)
+-- DROPDOWN TARGET (Multiple Select) - ALL PETS, Non-Fav, Normal
 -- ============================================================
 
 local targetLabelToUUID = {}
@@ -298,9 +297,8 @@ local TargetDropdown = MainTab:CreateDropdown({
     Name = "Pilih Target (Multiple, Non-Fav, Normal)",
     Options = {"Memuat data..."},
     CurrentOption = "Memuat data...",
-    MultipleOptions = true,  -- <--- MULTIPLE SELECT
+    MultipleOptions = true,
     Callback = function(selectedLabels)
-        -- selectedLabels berupa table of string (label)
         state.targetQueue = {}
         for _, label in ipairs(selectedLabels) do
             local uuid = targetLabelToUUID[label]
@@ -315,8 +313,8 @@ local TargetDropdown = MainTab:CreateDropdown({
 })
 
 local function refreshTargetDropdown()
+    -- Ambil SEMUA pet dengan isFavorite = false dan mutation = Normal
     local hasil = DataPetModule.findPets({
-        type = "Mimic Octopus",
         isFavorite = false,
         mutation = "Normal",
         excludeUUIDs = {state.selectedMimicUUID, state.selectedSharkUUID}
@@ -336,18 +334,22 @@ local function refreshTargetDropdown()
 end
 
 -- ============================================================
--- TUMBAL (Input Text, Multiple Nama)
+-- TUMBAL (Input Text, Multiple Nama, Support Spasi)
 -- ============================================================
 
 MainTab:CreateInput({
     Name = "Nama Tumbal (pisah koma)",
-    PlaceholderText = "Contoh: Dog, Cat, Bunny",
+    PlaceholderText = "Contoh: Dog, Golden Lab, Black Bunny",
     CurrentValue = table.concat(state.tumbalNames, ", "),
     Callback = function(Value)
         if Value and Value ~= "" then
             local names = {}
-            for token in string.gmatch(Value, "[^, ]+") do
-                if token ~= "" then table.insert(names, token) end
+            -- Split berdasarkan koma, lalu trim spasi
+            for token in string.gmatch(Value, "[^,]+") do
+                local trimmed = token:match("^%s*(.-)%s*$")
+                if trimmed ~= "" then
+                    table.insert(names, trimmed)
+                end
             end
             if #names > 0 then
                 state.tumbalNames = names
@@ -438,4 +440,4 @@ refreshSharkDropdown()
 refreshTargetDropdown()
 updateStatusLabel()
 
-print("✅ Auto Shark siap (Multiple Target). Tekan K untuk membuka UI.")
+print("✅ Auto Shark siap (Target: Semua Non-Fav Normal). Tekan K untuk membuka UI.")
