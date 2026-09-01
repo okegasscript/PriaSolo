@@ -431,7 +431,7 @@ local TimDropdown, TargetLevelDropdown
 local PnpDropdown
 
 -- ============================================================
--- FUNGSI REFRESH (tanpa label)
+-- FUNGSI REFRESH
 -- ============================================================
 
 local function refreshMimicDropdown(filterText)
