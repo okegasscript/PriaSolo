@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - FINAL (Auto Shark + Auto Leveling + PNP Independen)
+-- Pria Solo HUB - FINAL (Semua fitur, urutan benar)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -348,12 +348,10 @@ local function pnpProcessPet(uuid)
     local pickupDelay = state.pnpPickupDelay or 0.6
     local placeDelay = state.pnpPlaceDelay or 0
 
-    -- Unequip setelah pickupDelay
     task.wait(pickupDelay)
     SharkLogic.unequipPet(PetsService, uuid)
     print("📤 PNP unequip:", uuid)
 
-    -- Equip setelah placeDelay
     task.wait(placeDelay)
     SharkLogic.equipPet(PetsService, uuid, SharkLogic.defaultConfig.slotCFrame)
     print("📥 PNP equip:", uuid)
@@ -368,8 +366,7 @@ end
 local isHandlingCooldownEvent = false
 
 PetCooldownsEvent.OnClientEvent:Connect(function(petId, dataArray)
-    -- ===== PNP (INDEPENDEN) =====
-    -- Dijalankan tanpa peduli Auto Shark atau Auto Leveling
+    -- PNP (INDEPENDEN)
     if state.pnpActive and petId and state.pnpPets and type(state.pnpPets) == "table" then
         for _, uuid in ipairs(state.pnpPets) do
             if petId == uuid then
@@ -388,7 +385,7 @@ PetCooldownsEvent.OnClientEvent:Connect(function(petId, dataArray)
         end
     end
 
-    -- ===== Auto Shark (tetap sama, tidak berubah) =====
+    -- Auto Shark
     if state.isSharkActive and petId == state.selectedMimicUUID and not isHandlingCooldownEvent then
         local time = nil
         for _, entry in ipairs(dataArray) do
@@ -544,19 +541,270 @@ local Window = Rayfield:CreateWindow({
 })
 
 -- ============================================================
--- TAB 1: AUTO SHARK
+-- DEFINE UI ELEMENTS (dibuat di sini agar bisa diakses oleh refreshAllUI)
 -- ============================================================
 
-local SharkTab = Window:CreateTab("Auto Shark")
+local TumbalInput
+local MinLevelSlider
+local TargetLevelSlider
+local SharkToggle
+local LevelingToggle
+local PnpToggle
 
-local StatusLabel = SharkTab:CreateLabel("Mimic: (belum) | Shark: (belum) | Target: 0 terpilih")
+-- ============================================================
+-- DEFINE FUNGSI REFRESH (sebelum refreshAllUI)
+-- ============================================================
 
+-- Fungsi update status label (akan digunakan di refreshAllUI)
+local StatusLabel
 local function updateStatusLabel()
     local mimicText = state.selectedMimicUUID and tostring(state.selectedMimicUUID) or "(belum)"
     local sharkText = state.selectedSharkUUID and tostring(state.selectedSharkUUID) or "(belum)"
     local targetCount = #state.targetQueue
-    StatusLabel:Set("Mimic: " .. mimicText .. " | Shark: " .. sharkText .. " | Target: " .. targetCount .. " terpilih")
+    if StatusLabel then
+        StatusLabel:Set("Mimic: " .. mimicText .. " | Shark: " .. sharkText .. " | Target: " .. targetCount .. " terpilih")
+    end
 end
+
+-- Fungsi refresh dropdown Mimic (harus didefinisikan sebelum dipanggil)
+local mimicLabelToUUID = {}
+local MimicDropdown
+local MimicFilterInput
+local function refreshMimicDropdown(filterText)
+    filterText = filterText or (MimicFilterInput and MimicFilterInput:Get() or "")
+    local currentUUID = state.selectedMimicUUID
+    local hasil = DataPetModule.findPets({ name = "Mimic", isFavorite = true })
+    local options = {}
+    mimicLabelToUUID = {}
+    for _, pet in ipairs(hasil) do
+        local label = formatPetLabel(pet)
+        if string.lower(label):find(string.lower(filterText)) then
+            if mimicLabelToUUID[label] then
+                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
+            end
+            table.insert(options, label)
+            mimicLabelToUUID[label] = pet.uuid
+        end
+    end
+    table.sort(options, sortAlphabetically)
+    if #options == 0 then options = {"❌ Tidak ada Mimic favorit"} end
+    if MimicDropdown then
+        MimicDropdown:Refresh(options)
+        if currentUUID then
+            for label, uuid in pairs(mimicLabelToUUID) do
+                if uuid == currentUUID then
+                    MimicDropdown:SetCurrentOption(label)
+                    break
+                end
+            end
+        end
+    end
+end
+
+-- Shark
+local sharkLabelToUUID = {}
+local SharkDropdown
+local SharkFilterInput
+local function refreshSharkDropdown(filterText)
+    filterText = filterText or (SharkFilterInput and SharkFilterInput:Get() or "")
+    local currentUUID = state.selectedSharkUUID
+    local hasil = DataPetModule.findPets({ name = "Shark", isFavorite = true })
+    local options = {}
+    sharkLabelToUUID = {}
+    for _, pet in ipairs(hasil) do
+        local label = formatPetLabel(pet)
+        if string.lower(label):find(string.lower(filterText)) then
+            if sharkLabelToUUID[label] then
+                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
+            end
+            table.insert(options, label)
+            sharkLabelToUUID[label] = pet.uuid
+        end
+    end
+    table.sort(options, sortAlphabetically)
+    if #options == 0 then options = {"❌ Tidak ada Shark favorit"} end
+    if SharkDropdown then
+        SharkDropdown:Refresh(options)
+        if currentUUID then
+            for label, uuid in pairs(sharkLabelToUUID) do
+                if uuid == currentUUID then
+                    SharkDropdown:SetCurrentOption(label)
+                    break
+                end
+            end
+        end
+    end
+end
+
+-- Target
+local targetLabelToUUID = {}
+local TargetDropdown
+local TargetFilterInput
+local function refreshTargetDropdown(filterText)
+    filterText = filterText or (TargetFilterInput and TargetFilterInput:Get() or "")
+    local currentQueue = state.targetQueue
+    local hasil = DataPetModule.findPets({
+        type = "Mimic Octopus",
+        isFavorite = false,
+        mutation = "Normal",
+        excludeUUIDs = {state.selectedMimicUUID, state.selectedSharkUUID}
+    })
+    local options = {}
+    targetLabelToUUID = {}
+    for _, pet in ipairs(hasil) do
+        local label = formatPetLabel(pet)
+        if string.lower(label):find(string.lower(filterText)) then
+            if targetLabelToUUID[label] then
+                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
+            end
+            table.insert(options, label)
+            targetLabelToUUID[label] = pet.uuid
+        end
+    end
+    table.sort(options, sortAlphabetically)
+    if #options == 0 then options = {"❌ Tidak ada target"} end
+    if TargetDropdown then
+        TargetDropdown:Refresh(options)
+        if #currentQueue > 0 then
+            local selectedLabels = {}
+            for _, uuid in ipairs(currentQueue) do
+                for label, u in pairs(targetLabelToUUID) do
+                    if u == uuid then
+                        table.insert(selectedLabels, label)
+                        break
+                    end
+                end
+            end
+            if #selectedLabels > 0 then
+                TargetDropdown:SetSelectedOptions(selectedLabels)
+            end
+        end
+    end
+end
+
+-- Tim Leveling
+local timLabelToUUID = {}
+local TimDropdown
+local TimFilterInput
+local function refreshTimDropdown(filterText)
+    filterText = filterText or (TimFilterInput and TimFilterInput:Get() or "")
+    local hasil = DataPetModule.findPets({ isFavorite = true })
+    local options = {}
+    timLabelToUUID = {}
+    for _, pet in ipairs(hasil) do
+        local label = formatPetLabel(pet)
+        if string.lower(label):find(string.lower(filterText)) then
+            if timLabelToUUID[label] then
+                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
+            end
+            table.insert(options, label)
+            timLabelToUUID[label] = pet.uuid
+        end
+    end
+    table.sort(options, sortAlphabetically)
+    if #options == 0 then options = {"❌ Tidak ada pet favorit"} end
+    if TimDropdown then
+        TimDropdown:Refresh(options)
+        if #state.levelingTim > 0 then
+            local selectedLabels = {}
+            for _, uuid in ipairs(state.levelingTim) do
+                for label, u in pairs(timLabelToUUID) do
+                    if u == uuid then
+                        table.insert(selectedLabels, label)
+                        break
+                    end
+                end
+            end
+            if #selectedLabels > 0 then
+                TimDropdown:SetSelectedOptions(selectedLabels)
+            end
+        end
+    end
+end
+
+-- Target Leveling
+local targetLevelLabelToUUID = {}
+local TargetLevelDropdown
+local TargetLevelFilterInput
+local function refreshTargetLevelDropdown(filterText)
+    filterText = filterText or (TargetLevelFilterInput and TargetLevelFilterInput:Get() or "")
+    local hasil = DataPetModule.findPets({ isFavorite = false })
+    local options = {}
+    targetLevelLabelToUUID = {}
+    for _, pet in ipairs(hasil) do
+        local label = formatPetLabel(pet)
+        if string.lower(label):find(string.lower(filterText)) then
+            if targetLevelLabelToUUID[label] then
+                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
+            end
+            table.insert(options, label)
+            targetLevelLabelToUUID[label] = pet.uuid
+        end
+    end
+    table.sort(options, sortAlphabetically)
+    if #options == 0 then options = {"❌ Tidak ada pet non-favorit"} end
+    if TargetLevelDropdown then
+        TargetLevelDropdown:Refresh(options)
+        if #state.levelingTargets > 0 then
+            local selectedLabels = {}
+            for _, uuid in ipairs(state.levelingTargets) do
+                for label, u in pairs(targetLevelLabelToUUID) do
+                    if u == uuid then
+                        table.insert(selectedLabels, label)
+                        break
+                    end
+                end
+            end
+            if #selectedLabels > 0 then
+                TargetLevelDropdown:SetSelectedOptions(selectedLabels)
+            end
+        end
+    end
+end
+
+-- PNP
+local pnpLabelToUUID = {}
+local PnpDropdown
+local PnpFilterInput
+local function refreshPnpDropdown(filterText)
+    filterText = filterText or (PnpFilterInput and PnpFilterInput:Get() or "")
+    local hasil = DataPetModule.findPets({ isFavorite = true })
+    local options = {}
+    pnpLabelToUUID = {}
+    for _, pet in ipairs(hasil) do
+        local label = formatPetLabel(pet)
+        if string.lower(label):find(string.lower(filterText)) then
+            if pnpLabelToUUID[label] then
+                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
+            end
+            table.insert(options, label)
+            pnpLabelToUUID[label] = pet.uuid
+        end
+    end
+    table.sort(options, sortAlphabetically)
+    if #options == 0 then options = {"❌ Tidak ada pet favorit"} end
+    if PnpDropdown then
+        PnpDropdown:Refresh(options)
+        if #state.pnpPets > 0 then
+            local selectedLabels = {}
+            for _, uuid in ipairs(state.pnpPets) do
+                for label, u in pairs(pnpLabelToUUID) do
+                    if u == uuid then
+                        table.insert(selectedLabels, label)
+                        break
+                    end
+                end
+            end
+            if #selectedLabels > 0 then
+                PnpDropdown:SetSelectedOptions(selectedLabels)
+            end
+        end
+    end
+end
+
+-- ============================================================
+-- REFRESH ALL UI (definisi setelah semua fungsi refresh)
+-- ============================================================
 
 local function refreshAllUI()
     refreshMimicDropdown()
@@ -577,40 +825,15 @@ local function refreshAllUI()
     end
 end
 
--- Dropdown Mimic
-local mimicLabelToUUID = {}
-local MimicDropdown
-local MimicFilterInput
+-- ============================================================
+-- TAB 1: AUTO SHARK
+-- ============================================================
 
-local function refreshMimicDropdown(filterText)
-    filterText = filterText or (MimicFilterInput and MimicFilterInput:Get() or "")
-    local currentUUID = state.selectedMimicUUID
-    local hasil = DataPetModule.findPets({ name = "Mimic", isFavorite = true })
-    local options = {}
-    mimicLabelToUUID = {}
-    for _, pet in ipairs(hasil) do
-        local label = formatPetLabel(pet)
-        if string.lower(label):find(string.lower(filterText)) then
-            if mimicLabelToUUID[label] then
-                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
-            end
-            table.insert(options, label)
-            mimicLabelToUUID[label] = pet.uuid
-        end
-    end
-    table.sort(options, sortAlphabetically)
-    if #options == 0 then options = {"❌ Tidak ada Mimic favorit"} end
-    MimicDropdown:Refresh(options)
-    if currentUUID then
-        for label, uuid in pairs(mimicLabelToUUID) do
-            if uuid == currentUUID then
-                MimicDropdown:SetCurrentOption(label)
-                break
-            end
-        end
-    end
-end
+local SharkTab = Window:CreateTab("Auto Shark")
 
+StatusLabel = SharkTab:CreateLabel("Mimic: (belum) | Shark: (belum) | Target: 0 terpilih")
+
+-- Mimic
 MimicFilterInput = SharkTab:CreateInput({
     Name = "🔍 Cari Mimic",
     PlaceholderText = "Filter...",
@@ -636,40 +859,7 @@ MimicDropdown = SharkTab:CreateDropdown({
     end
 })
 
--- Dropdown Shark
-local sharkLabelToUUID = {}
-local SharkDropdown
-local SharkFilterInput
-
-local function refreshSharkDropdown(filterText)
-    filterText = filterText or (SharkFilterInput and SharkFilterInput:Get() or "")
-    local currentUUID = state.selectedSharkUUID
-    local hasil = DataPetModule.findPets({ name = "Shark", isFavorite = true })
-    local options = {}
-    sharkLabelToUUID = {}
-    for _, pet in ipairs(hasil) do
-        local label = formatPetLabel(pet)
-        if string.lower(label):find(string.lower(filterText)) then
-            if sharkLabelToUUID[label] then
-                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
-            end
-            table.insert(options, label)
-            sharkLabelToUUID[label] = pet.uuid
-        end
-    end
-    table.sort(options, sortAlphabetically)
-    if #options == 0 then options = {"❌ Tidak ada Shark favorit"} end
-    SharkDropdown:Refresh(options)
-    if currentUUID then
-        for label, uuid in pairs(sharkLabelToUUID) do
-            if uuid == currentUUID then
-                SharkDropdown:SetCurrentOption(label)
-                break
-            end
-        end
-    end
-end
-
+-- Shark
 SharkFilterInput = SharkTab:CreateInput({
     Name = "🔍 Cari Shark",
     PlaceholderText = "Filter...",
@@ -695,51 +885,7 @@ SharkDropdown = SharkTab:CreateDropdown({
     end
 })
 
--- Dropdown Target
-local targetLabelToUUID = {}
-local TargetDropdown
-local TargetFilterInput
-
-local function refreshTargetDropdown(filterText)
-    filterText = filterText or (TargetFilterInput and TargetFilterInput:Get() or "")
-    local currentQueue = state.targetQueue
-    local hasil = DataPetModule.findPets({
-        type = "Mimic Octopus",
-        isFavorite = false,
-        mutation = "Normal",
-        excludeUUIDs = {state.selectedMimicUUID, state.selectedSharkUUID}
-    })
-    local options = {}
-    targetLabelToUUID = {}
-    for _, pet in ipairs(hasil) do
-        local label = formatPetLabel(pet)
-        if string.lower(label):find(string.lower(filterText)) then
-            if targetLabelToUUID[label] then
-                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
-            end
-            table.insert(options, label)
-            targetLabelToUUID[label] = pet.uuid
-        end
-    end
-    table.sort(options, sortAlphabetically)
-    if #options == 0 then options = {"❌ Tidak ada target"} end
-    TargetDropdown:Refresh(options)
-    if #currentQueue > 0 then
-        local selectedLabels = {}
-        for _, uuid in ipairs(currentQueue) do
-            for label, u in pairs(targetLabelToUUID) do
-                if u == uuid then
-                    table.insert(selectedLabels, label)
-                    break
-                end
-            end
-        end
-        if #selectedLabels > 0 then
-            TargetDropdown:SetSelectedOptions(selectedLabels)
-        end
-    end
-end
-
+-- Target
 TargetFilterInput = SharkTab:CreateInput({
     Name = "🔍 Cari Target",
     PlaceholderText = "Filter...",
@@ -767,7 +913,7 @@ TargetDropdown = SharkTab:CreateDropdown({
 })
 
 -- Tumbal
-local TumbalInput = SharkTab:CreateInput({
+TumbalInput = SharkTab:CreateInput({
     Name = "Nama Tumbal (pisah koma)",
     PlaceholderText = "Contoh: Dog, Golden Lab, Black Bunny",
     CurrentValue = table.concat(state.tumbalNames, ", "),
@@ -787,7 +933,7 @@ local TumbalInput = SharkTab:CreateInput({
 })
 
 -- Min Level
-local MinLevelSlider = SharkTab:CreateSlider({
+MinLevelSlider = SharkTab:CreateSlider({
     Name = "Min Level Tumbal",
     Range = {0, 500},
     Increment = 1,
@@ -813,7 +959,6 @@ SharkTab:CreateButton({
 })
 
 -- Start/Stop Shark
-local SharkToggle
 SharkToggle = SharkTab:CreateToggle({
     Name = "▶️ Start / Stop Shark",
     CurrentValue = false,
@@ -868,45 +1013,7 @@ SharkToggle = SharkTab:CreateToggle({
 
 local LevelingTab = Window:CreateTab("Auto Leveling")
 
--- Tim Leveling
-local timLabelToUUID = {}
-local TimDropdown
-local TimFilterInput
-
-local function refreshTimDropdown(filterText)
-    filterText = filterText or (TimFilterInput and TimFilterInput:Get() or "")
-    local hasil = DataPetModule.findPets({ isFavorite = true })
-    local options = {}
-    timLabelToUUID = {}
-    for _, pet in ipairs(hasil) do
-        local label = formatPetLabel(pet)
-        if string.lower(label):find(string.lower(filterText)) then
-            if timLabelToUUID[label] then
-                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
-            end
-            table.insert(options, label)
-            timLabelToUUID[label] = pet.uuid
-        end
-    end
-    table.sort(options, sortAlphabetically)
-    if #options == 0 then options = {"❌ Tidak ada pet favorit"} end
-    TimDropdown:Refresh(options)
-    if #state.levelingTim > 0 then
-        local selectedLabels = {}
-        for _, uuid in ipairs(state.levelingTim) do
-            for label, u in pairs(timLabelToUUID) do
-                if u == uuid then
-                    table.insert(selectedLabels, label)
-                    break
-                end
-            end
-        end
-        if #selectedLabels > 0 then
-            TimDropdown:SetSelectedOptions(selectedLabels)
-        end
-    end
-end
-
+-- Tim
 TimFilterInput = LevelingTab:CreateInput({
     Name = "🔍 Cari Tim",
     PlaceholderText = "Filter...",
@@ -941,44 +1048,6 @@ TimDropdown = LevelingTab:CreateDropdown({
 })
 
 -- Target Leveling
-local targetLevelLabelToUUID = {}
-local TargetLevelDropdown
-local TargetLevelFilterInput
-
-local function refreshTargetLevelDropdown(filterText)
-    filterText = filterText or (TargetLevelFilterInput and TargetLevelFilterInput:Get() or "")
-    local hasil = DataPetModule.findPets({ isFavorite = false })
-    local options = {}
-    targetLevelLabelToUUID = {}
-    for _, pet in ipairs(hasil) do
-        local label = formatPetLabel(pet)
-        if string.lower(label):find(string.lower(filterText)) then
-            if targetLevelLabelToUUID[label] then
-                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
-            end
-            table.insert(options, label)
-            targetLevelLabelToUUID[label] = pet.uuid
-        end
-    end
-    table.sort(options, sortAlphabetically)
-    if #options == 0 then options = {"❌ Tidak ada pet non-favorit"} end
-    TargetLevelDropdown:Refresh(options)
-    if #state.levelingTargets > 0 then
-        local selectedLabels = {}
-        for _, uuid in ipairs(state.levelingTargets) do
-            for label, u in pairs(targetLevelLabelToUUID) do
-                if u == uuid then
-                    table.insert(selectedLabels, label)
-                    break
-                end
-            end
-        end
-        if #selectedLabels > 0 then
-            TargetLevelDropdown:SetSelectedOptions(selectedLabels)
-        end
-    end
-end
-
 TargetLevelFilterInput = LevelingTab:CreateInput({
     Name = "🔍 Cari Target Leveling",
     PlaceholderText = "Filter...",
@@ -1010,7 +1079,7 @@ TargetLevelDropdown = LevelingTab:CreateDropdown({
 })
 
 -- Target Level Slider
-local TargetLevelSlider = LevelingTab:CreateSlider({
+TargetLevelSlider = LevelingTab:CreateSlider({
     Name = "Target Level",
     Range = {0, 500},
     Increment = 1,
@@ -1028,7 +1097,6 @@ local TargetLevelSlider = LevelingTab:CreateSlider({
 })
 
 -- Start/Stop Leveling
-local LevelingToggle
 LevelingToggle = LevelingTab:CreateToggle({
     Name = "▶️ Start / Stop Leveling",
     CurrentValue = false,
@@ -1058,48 +1126,10 @@ LevelingToggle = LevelingTab:CreateToggle({
 })
 
 -- ============================================================
--- TAB 3: PNP (INDEPENDEN)
+-- TAB 3: PNP
 -- ============================================================
 
 local PnpTab = Window:CreateTab("PNP")
-
-local pnpLabelToUUID = {}
-local PnpDropdown
-local PnpFilterInput
-
-local function refreshPnpDropdown(filterText)
-    filterText = filterText or (PnpFilterInput and PnpFilterInput:Get() or "")
-    local hasil = DataPetModule.findPets({ isFavorite = true })
-    local options = {}
-    pnpLabelToUUID = {}
-    for _, pet in ipairs(hasil) do
-        local label = formatPetLabel(pet)
-        if string.lower(label):find(string.lower(filterText)) then
-            if pnpLabelToUUID[label] then
-                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
-            end
-            table.insert(options, label)
-            pnpLabelToUUID[label] = pet.uuid
-        end
-    end
-    table.sort(options, sortAlphabetically)
-    if #options == 0 then options = {"❌ Tidak ada pet favorit"} end
-    PnpDropdown:Refresh(options)
-    if #state.pnpPets > 0 then
-        local selectedLabels = {}
-        for _, uuid in ipairs(state.pnpPets) do
-            for label, u in pairs(pnpLabelToUUID) do
-                if u == uuid then
-                    table.insert(selectedLabels, label)
-                    break
-                end
-            end
-        end
-        if #selectedLabels > 0 then
-            PnpDropdown:SetSelectedOptions(selectedLabels)
-        end
-    end
-end
 
 PnpFilterInput = PnpTab:CreateInput({
     Name = "🔍 Cari Pet",
@@ -1162,7 +1192,6 @@ PnpTab:CreateButton({
     end
 })
 
-local PnpToggle
 PnpToggle = PnpTab:CreateToggle({
     Name = "▶️ Start / Stop PNP",
     CurrentValue = false,
@@ -1207,7 +1236,7 @@ SettingsTab:CreateButton({
 })
 
 -- ============================================================
--- INISIALISASI
+-- INISIALISASI AKHIR
 -- ============================================================
 
 refreshAllUI()
