@@ -1,11 +1,10 @@
 -- ============================================================
--- PriaSolo - Main Entry (FINAL)
+-- Pria Solo HUB - Main Entry (FINAL)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
-local HttpService = game:GetService("HttpService")
 
 -- Load modul
 local DataPetModule = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua"))()
@@ -20,12 +19,14 @@ end
 print("✅ Semua modul berhasil dimuat")
 
 -- ============================================================
+-- KONFIGURASI FILE
+-- ============================================================
+local CONFIG_FILE = "PriaSolo.json"
+
+-- ============================================================
 -- FUNGSI BANTUAN
 -- ============================================================
-
--- Format label pet: Mutasi Nama Berat KG Lv.Level
 local function formatPetLabel(pet)
-    -- Gunakan pet.weight yang sudah diambil dari BaseWeight/Weight
     local mut = pet.mutation or "Normal"
     local name = pet.name or "Unknown"
     local weight = pet.weight or 0
@@ -36,7 +37,6 @@ end
 -- ============================================================
 -- STATE GLOBAL
 -- ============================================================
-
 local state = {
     -- Auto Shark
     isActive = false,
@@ -62,11 +62,8 @@ local state = {
 }
 
 -- ============================================================
--- SAVE / LOAD KONFIGURASI
+-- SAVE / LOAD
 -- ============================================================
-
-local CONFIG_FILE = "PriaSolo.json"
-
 local function saveConfig()
     local config = {
         selectedMimicUUID = state.selectedMimicUUID,
@@ -78,14 +75,14 @@ local function saveConfig()
         levelingTargets = state.levelingTargets,
         targetLevel = state.targetLevel,
     }
-    local json = HttpService:JSONEncode(config)
+    local json = game:GetService("HttpService"):JSONEncode(config)
     local success, err = pcall(function()
         writefile(CONFIG_FILE, json)
     end)
     if success then
         print("✅ Konfigurasi disimpan ke", CONFIG_FILE)
     else
-        warn("❌ Gagal menyimpan konfigurasi:", err)
+        warn("❌ Gagal menyimpan:", err)
     end
 end
 
@@ -94,10 +91,10 @@ local function loadConfig()
         return readfile(CONFIG_FILE)
     end)
     if not success then
-        print("ℹ️ File konfigurasi tidak ditemukan, gunakan default")
+        print("ℹ️ File konfigurasi tidak ditemukan, menggunakan default")
         return
     end
-    local decoded = HttpService:JSONDecode(data)
+    local decoded = game:GetService("HttpService"):JSONDecode(data)
     if decoded then
         state.selectedMimicUUID = decoded.selectedMimicUUID
         state.selectedSharkUUID = decoded.selectedSharkUUID
@@ -108,18 +105,17 @@ local function loadConfig()
         state.levelingTargets = decoded.levelingTargets or {}
         state.targetLevel = decoded.targetLevel or 100
         print("✅ Konfigurasi dimuat dari", CONFIG_FILE)
+        -- Refresh UI setelah load
+        refreshAllDropdowns()
+        updateStatusLabel()
     else
-        warn("❌ Gagal memuat konfigurasi")
+        warn("❌ Gagal memuat file")
     end
 end
-
--- Auto-load saat startup
-loadConfig()
 
 -- ============================================================
 -- EVENT SERVICE
 -- ============================================================
-
 local GameEvents = ReplicatedStorage:WaitForChild("GameEvents")
 local PetCooldownsEvent = GameEvents:WaitForChild("PetCooldownsUpdated")
 local PetsService = GameEvents:WaitForChild("PetsService")
@@ -128,7 +124,6 @@ local NotificationEvent = GameEvents:WaitForChild("Notification")
 -- ============================================================
 -- FUNGSI LOGIKA AUTO SHARK
 -- ============================================================
-
 local function unequipTargetAndEquipShark()
     if state.currentTargetUUID then
         SharkLogic.unequipPet(PetsService, state.currentTargetUUID)
@@ -192,7 +187,6 @@ end
 -- ============================================================
 -- FUNGSI LOGIKA AUTO LEVELING
 -- ============================================================
-
 local function unequipAllGardenPets()
     local data = DataPetModule.getAllPets()
     if not data then return end
@@ -296,9 +290,8 @@ local function stopLeveling()
 end
 
 -- ============================================================
--- EVENT LISTENER (Cooldown untuk Auto Shark)
+-- EVENT LISTENER
 -- ============================================================
-
 local isHandlingCooldownEvent = false
 
 PetCooldownsEvent.OnClientEvent:Connect(function(petId, dataArray)
@@ -340,10 +333,9 @@ end)
 -- ============================================================
 -- UI (Rayfield)
 -- ============================================================
-
 local Window = Rayfield:CreateWindow({
-    Name = "Pria Solo Hub",
-    LoadingTitle = "Memuat...",
+    Name = "Pria Solo HUB",
+    LoadingTitle = "Memuat Pria Solo HUB...",
     LoadingSubtitle = "by PriaSolo",
     ConfigurationSaving = {
         Enabled = true,
@@ -358,7 +350,6 @@ local Window = Rayfield:CreateWindow({
 -- ============================================================
 -- TAB 1: AUTO SHARK
 -- ============================================================
-
 local SharkTab = Window:CreateTab("Auto Shark")
 
 local StatusLabel = SharkTab:CreateLabel("Mimic: (belum) | Shark: (belum) | Target: 0 terpilih")
@@ -377,6 +368,7 @@ local MimicDropdown = SharkTab:CreateDropdown({
     Options = {"Memuat data..."},
     CurrentOption = "Memuat data...",
     MultipleOptions = false,
+    Search = true,
     Callback = function(option)
         local selectedLabel = (type(option) == "table") and option[1] or option
         local uuid = mimicLabelToUUID[selectedLabel]
@@ -384,7 +376,6 @@ local MimicDropdown = SharkTab:CreateDropdown({
             state.selectedMimicUUID = uuid
             print("✅ Mimic dipilih:", selectedLabel, "UUID:", uuid)
             updateStatusLabel()
-            saveConfig()
         end
     end
 })
@@ -399,6 +390,7 @@ local function refreshMimicDropdown()
         table.insert(options, label)
         mimicLabelToUUID[label] = pet.uuid
     end
+    table.sort(options)
     if #options == 0 then options = {"❌ Tidak ada Mimic favorit"} end
     MimicDropdown:Refresh(options)
 end
@@ -410,6 +402,7 @@ local SharkDropdown = SharkTab:CreateDropdown({
     Options = {"Memuat data..."},
     CurrentOption = "Memuat data...",
     MultipleOptions = false,
+    Search = true,
     Callback = function(option)
         local selectedLabel = (type(option) == "table") and option[1] or option
         local uuid = sharkLabelToUUID[selectedLabel]
@@ -417,7 +410,6 @@ local SharkDropdown = SharkTab:CreateDropdown({
             state.selectedSharkUUID = uuid
             print("✅ Shark dipilih:", selectedLabel, "UUID:", uuid)
             updateStatusLabel()
-            saveConfig()
         end
     end
 })
@@ -432,17 +424,19 @@ local function refreshSharkDropdown()
         table.insert(options, label)
         sharkLabelToUUID[label] = pet.uuid
     end
+    table.sort(options)
     if #options == 0 then options = {"❌ Tidak ada Shark favorit"} end
     SharkDropdown:Refresh(options)
 end
 
--- Dropdown Target (Multiple)
+-- Dropdown Target
 local targetLabelToUUID = {}
 local TargetDropdown = SharkTab:CreateDropdown({
     Name = "Pilih Target (Multiple, Non-Fav, Normal)",
     Options = {"Memuat data..."},
     CurrentOption = "Memuat data...",
     MultipleOptions = true,
+    Search = true,
     Callback = function(selectedLabels)
         state.targetQueue = {}
         for _, label in ipairs(selectedLabels) do
@@ -452,7 +446,6 @@ local TargetDropdown = SharkTab:CreateDropdown({
         state.currentTargetIndex = 1
         print("✅ Target dipilih:", #state.targetQueue, "pet")
         updateStatusLabel()
-        saveConfig()
     end
 })
 
@@ -471,6 +464,7 @@ local function refreshTargetDropdown()
         table.insert(options, label)
         targetLabelToUUID[label] = pet.uuid
     end
+    table.sort(options)
     if #options == 0 then options = {"❌ Tidak ada target"} end
     TargetDropdown:Refresh(options)
 end
@@ -490,7 +484,6 @@ SharkTab:CreateInput({
             if #names > 0 then
                 state.tumbalNames = names
                 print("✅ Tumbal diubah:", table.concat(names, ", "))
-                saveConfig()
             end
         end
     end
@@ -506,7 +499,6 @@ SharkTab:CreateSlider({
     Callback = function(value)
         state.minLevel = value
         print("📊 Min Level Tumbal:", value)
-        saveConfig()
     end
 })
 
@@ -514,9 +506,7 @@ SharkTab:CreateSlider({
 SharkTab:CreateButton({
     Name = "🔄 Refresh Daftar Pet",
     Callback = function()
-        refreshMimicDropdown()
-        refreshSharkDropdown()
-        refreshTargetDropdown()
+        refreshAllDropdowns()
     end
 })
 
@@ -563,7 +553,6 @@ SharkToggle = SharkTab:CreateToggle({
 -- ============================================================
 -- TAB 2: AUTO LEVELING
 -- ============================================================
-
 local LevelingTab = Window:CreateTab("Auto Leveling")
 
 -- Tim Leveling
@@ -573,6 +562,7 @@ local TimDropdown = LevelingTab:CreateDropdown({
     Options = {"Memuat data..."},
     CurrentOption = "Memuat data...",
     MultipleOptions = true,
+    Search = true,
     Callback = function(selectedLabels)
         state.levelingTim = {}
         for _, label in ipairs(selectedLabels) do
@@ -584,7 +574,6 @@ local TimDropdown = LevelingTab:CreateDropdown({
             table.move(state.levelingTim, 1, 7, 1, {})
         end
         print("✅ Tim Leveling dipilih:", #state.levelingTim, "pet")
-        saveConfig()
     end
 })
 
@@ -598,6 +587,7 @@ local function refreshTimDropdown()
         table.insert(options, label)
         timLabelToUUID[label] = pet.uuid
     end
+    table.sort(options)
     if #options == 0 then options = {"❌ Tidak ada pet favorit"} end
     TimDropdown:Refresh(options)
 end
@@ -609,6 +599,7 @@ local TargetLevelDropdown = LevelingTab:CreateDropdown({
     Options = {"Memuat data..."},
     CurrentOption = "Memuat data...",
     MultipleOptions = true,
+    Search = true,
     Callback = function(selectedLabels)
         state.levelingTargets = {}
         for _, label in ipairs(selectedLabels) do
@@ -617,7 +608,6 @@ local TargetLevelDropdown = LevelingTab:CreateDropdown({
         end
         state.currentLevelingTargetIndex = 1
         print("✅ Target Leveling dipilih:", #state.levelingTargets, "pet")
-        saveConfig()
     end
 })
 
@@ -631,6 +621,7 @@ local function refreshTargetLevelDropdown()
         table.insert(options, label)
         targetLevelLabelToUUID[label] = pet.uuid
     end
+    table.sort(options)
     if #options == 0 then options = {"❌ Tidak ada pet non-favorit"} end
     TargetLevelDropdown:Refresh(options)
 end
@@ -645,7 +636,6 @@ LevelingTab:CreateSlider({
     Callback = function(value)
         state.targetLevel = value
         print("🎯 Target Level:", value)
-        saveConfig()
     end
 })
 
@@ -683,14 +673,38 @@ LevelingToggle = LevelingTab:CreateToggle({
 })
 
 -- ============================================================
+-- REFRESH ALL
+-- ============================================================
+function refreshAllDropdowns()
+    refreshMimicDropdown()
+    refreshSharkDropdown()
+    refreshTargetDropdown()
+    refreshTimDropdown()
+    refreshTargetLevelDropdown()
+end
+
+-- ============================================================
+-- SAVE / LOAD BUTTON
+-- ============================================================
+local function createSaveLoadButtons(tab)
+    tab:CreateButton({
+        Name = "💾 Save Config",
+        Callback = saveConfig
+    })
+    tab:CreateButton({
+        Name = "📂 Load Config",
+        Callback = loadConfig
+    })
+end
+
+createSaveLoadButtons(SharkTab)
+createSaveLoadButtons(LevelingTab)
+
+-- ============================================================
 -- INISIALISASI
 -- ============================================================
-
-refreshMimicDropdown()
-refreshSharkDropdown()
-refreshTargetDropdown()
-refreshTimDropdown()
-refreshTargetLevelDropdown()
+loadConfig()
+refreshAllDropdowns()
 updateStatusLabel()
 
-print("✅ PriaSolo siap. Tekan K untuk membuka UI.")
+print("✅ Pria Solo HUB siap. Tekan K untuk membuka UI.")
