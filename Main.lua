@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield GEN2 (FINAL)
+-- Pria Solo HUB - Rayfield GEN2 (Final Fix)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -8,14 +8,29 @@ local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 local CONFIG_FILE = "PriaSolo.json"
 
--- Load modul
-local DataPetModule = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua"))()
-local SharkLogic = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/SharkLogic.lua"))()
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2"))()
+-- ============================================================
+-- LOAD MODULES
+-- ============================================================
+
+local DataPetModule, SharkLogic, Rayfield
+
+local function loadModule(url)
+    local success, result = pcall(function()
+        return loadstring(game:HttpGet(url))()
+    end)
+    if not success then
+        warn("❌ Gagal load module dari " .. url .. ": " .. tostring(result))
+        return nil
+    end
+    return result
+end
+
+DataPetModule = loadModule("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua")
+SharkLogic = loadModule("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/SharkLogic.lua")
+Rayfield = loadModule("https://sirius.menu/gen2")
 
 if not DataPetModule or not SharkLogic or not Rayfield then
-    warn("❌ Gagal memuat modul")
-    return
+    error("❌ Gagal memuat modul yang diperlukan.")
 end
 
 print("✅ Modul berhasil dimuat")
@@ -793,9 +808,10 @@ local function updateAllUI()
 end
 
 -- ============================================================
--- TAB 1: AUTO SHARK
+-- BUAT UI ELEMENTS
 -- ============================================================
 
+-- TAB 1: AUTO SHARK
 local sharkTab = Window:CreateTab({ name = "Auto Shark", icon = "shark" })
 
 sharkTab:CreateInput({
@@ -1010,10 +1026,7 @@ SharkToggle = sharkTab:CreateToggle({
     end
 })
 
--- ============================================================
 -- TAB 2: AUTO LEVELING
--- ============================================================
-
 local levelingTab = Window:CreateTab({ name = "Auto Leveling", icon = "rocket" })
 
 levelingTab:CreateInput({
@@ -1166,10 +1179,7 @@ LevelingToggle = levelingTab:CreateToggle({
     end
 })
 
--- ============================================================
 -- TAB 3: PNP
--- ============================================================
-
 local pnpTab = Window:CreateTab({ name = "PNP", icon = "bolt" })
 
 pnpTab:CreateInput({
@@ -1280,10 +1290,7 @@ PnpToggle = pnpTab:CreateToggle({
     end
 })
 
--- ============================================================
 -- TAB 4: PENGATURAN
--- ============================================================
-
 local settingsTab = Window:CreateTab({ name = "Pengaturan", icon = "gear" })
 
 settingsTab:CreateButton({
