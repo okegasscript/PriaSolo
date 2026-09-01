@@ -6,7 +6,12 @@ SharkLogic.defaultConfig = {
     slotCFrame = CFrame.new(-13.018989562988, 0, -74.922821044922, 1,0,0,0,1,0,0,0,1)
 }
 
--- Fungsi findTumbal dengan parameter minLevel (default 0)
+-- Mencari tumbal dengan syarat:
+-- - Nama pet sesuai (exact match)
+-- - Bukan favorit
+-- - Level >= minLevel
+-- - Mutasi = "Blossoming" (WAJIB)
+-- - Tidak termasuk excludeUUIDs
 function SharkLogic.findTumbal(dataPetModule, tumbalNames, excludeUUIDs, minLevel)
     minLevel = minLevel or 0
     excludeUUIDs = excludeUUIDs or {}
@@ -14,34 +19,24 @@ function SharkLogic.findTumbal(dataPetModule, tumbalNames, excludeUUIDs, minLeve
         local results = dataPetModule.findPets({
             exactName = name,
             isFavorite = false,
-            minLevel = minLevel,   -- pakai parameter
+            minLevel = minLevel,
             excludeUUIDs = excludeUUIDs,
-            limit = 1
+            limit = 10
         })
-        if #results > 0 then
-            local petInfo = results[1]
-            if string.lower(name) == "cat" then
-                local catResults = dataPetModule.findPets({
-                    exactName = "Cat",
-                    isFavorite = false,
-                    minLevel = minLevel,
-                    mutation = "Blossoming",
-                    excludeUUIDs = excludeUUIDs,
-                    limit = 1
-                })
-                if #catResults > 0 then
-                    return catResults[1].pet, catResults[1].uuid
-                else
-                    return nil, nil
-                end
-            else
-                return petInfo.pet, petInfo.uuid
+        for _, petInfo in ipairs(results) do
+            if petInfo.mutation == "Blossoming" then
+                return petInfo.uuid
             end
         end
     end
-    return nil, nil
+    return nil
 end
 
+-- Mencari target dengan syarat:
+-- - Nama pet sesuai (exact match)
+-- - Bukan favorit
+-- - Mutasi = "Normal" (tanpa mutasi)
+-- - Tidak termasuk excludeUUIDs
 function SharkLogic.findTarget(dataPetModule, targetName, excludeUUIDs)
     excludeUUIDs = excludeUUIDs or {}
     local results = dataPetModule.findPets({
@@ -52,11 +47,11 @@ function SharkLogic.findTarget(dataPetModule, targetName, excludeUUIDs)
     })
     if #results > 0 then
         local petInfo = results[1]
-        if petInfo.mutation ~= "Blossoming" then
-            return petInfo.pet, petInfo.uuid
+        if petInfo.mutation == "Normal" then
+            return petInfo.uuid
         end
     end
-    return nil, nil
+    return nil
 end
 
 function SharkLogic.equipPet(petsService, uuid, cframe)
