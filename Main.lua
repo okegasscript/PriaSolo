@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - FINAL (Perbaikan Urutan Deklarasi)
+-- Pria Solo HUB - FINAL (Perbaikan method Rayfield v1)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -420,7 +420,7 @@ NotificationEvent.OnClientEvent:Connect(function(message)
 end)
 
 -- ============================================================
--- DEKLARASI VARIABEL UI (akan diisi nanti)
+-- DEKLARASI VARIABEL UI
 -- ============================================================
 
 local Window
@@ -432,7 +432,7 @@ local TimDropdown, TargetLevelDropdown
 local PnpDropdown
 
 -- ============================================================
--- FUNGSI REFRESH (didefinisikan di sini, sebelum loadConfig)
+-- FUNGSI REFRESH (dengan method Rayfield v1 yang benar)
 -- ============================================================
 
 local function updateStatusLabel()
@@ -665,7 +665,7 @@ local function refreshPnpDropdown(filterText)
 end
 
 -- ============================================================
--- REFRESH ALL UI (didefinisikan sebelum loadConfig dipakai)
+-- REFRESH ALL UI (dengan method yang benar)
 -- ============================================================
 
 local function refreshAllUI()
@@ -676,19 +676,21 @@ local function refreshAllUI()
     refreshTargetLevelDropdown()
     refreshPnpDropdown()
     updateStatusLabel()
+
+    -- Update input values dengan method yang benar di Rayfield v1
     if TumbalInput then
-        TumbalInput:SetCurrentValue(table.concat(state.tumbalNames, ", "))
+        TumbalInput:Set(table.concat(state.tumbalNames, ", "))  -- Set untuk Input
     end
     if MinLevelSlider then
-        MinLevelSlider:SetCurrentValue(state.minLevel)
+        MinLevelSlider:SetValue(state.minLevel)  -- SetValue untuk Slider
     end
     if TargetLevelSlider then
-        TargetLevelSlider:SetCurrentValue(state.targetLevel)
+        TargetLevelSlider:SetValue(state.targetLevel)  -- SetValue untuk Slider
     end
 end
 
 -- ============================================================
--- SAVE / LOAD (sekarang refreshAllUI sudah ada)
+-- SAVE / LOAD (sekarang refreshAllUI sudah benar)
 -- ============================================================
 
 local function saveConfig()
