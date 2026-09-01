@@ -161,40 +161,56 @@ local function updateStatusLabel()
     StatusLabel:Set("Mimic: " .. mimicText .. " | Shark: " .. sharkText)
 end
 
--- 1. Dropdown Mimic (CurrentOption sekarang STRING, bukan table)
+-- 1. Dropdown Mimic 
 local MimicDropdown = MainTab:CreateDropdown({
     Name = "Pilih Mimic",
     Options = {"Memuat data..."},
     CurrentOption = "Memuat data...",
     MultipleOptions = false,
     Callback = function(option)
-        print("[DEBUG] Mimic dropdown callback dipanggil dengan:", option)
-        local uuid = mimicLabelToUUID[option]
+        print("[DEBUG] Mimic dropdown RAW callback:", option, type(option))
+
+        local selectedLabel = option
+        if type(option) == "table" then
+            selectedLabel = option[1]
+        end
+
+        print("[DEBUG] Mimic selectedLabel setelah normalisasi:", selectedLabel)
+
+        local uuid = mimicLabelToUUID[selectedLabel]
         if uuid then
             state.selectedMimicUUID = uuid
-            print("✅ Mimic dipilih:", option, "UUID:", uuid)
+            print("✅ Mimic dipilih:", selectedLabel, "UUID:", uuid)
             updateStatusLabel()
         else
-            warn("⚠️ UUID tidak ditemukan untuk label:", option)
+            warn("⚠️ UUID tidak ditemukan untuk label:", tostring(selectedLabel))
         end
     end
 })
 
--- 2. Dropdown Shark (CurrentOption sekarang STRING, bukan table)
+-- 2. Dropdown Shark 
 local SharkDropdown = MainTab:CreateDropdown({
     Name = "Pilih Shark",
     Options = {"Memuat data..."},
     CurrentOption = "Memuat data...",
     MultipleOptions = false,
     Callback = function(option)
-        print("[DEBUG] Shark dropdown callback dipanggil dengan:", option)
-        local uuid = sharkLabelToUUID[option]
+        print("[DEBUG] Shark dropdown RAW callback:", option, type(option))
+
+        local selectedLabel = option
+        if type(option) == "table" then
+            selectedLabel = option[1]
+        end
+
+        print("[DEBUG] Shark selectedLabel setelah normalisasi:", selectedLabel)
+
+        local uuid = sharkLabelToUUID[selectedLabel]
         if uuid then
             state.selectedSharkUUID = uuid
-            print("✅ Shark dipilih:", option, "UUID:", uuid)
+            print("✅ Shark dipilih:", selectedLabel, "UUID:", uuid)
             updateStatusLabel()
         else
-            warn("⚠️ UUID tidak ditemukan untuk label:", option)
+            warn("⚠️ UUID tidak ditemukan untuk label:", tostring(selectedLabel))
         end
     end
 })
