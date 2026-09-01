@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - FINAL (Perbaikan Error Nil)
+-- Pria Solo HUB - FINAL (PNP tanpa print, CFrame khusus)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -19,6 +19,12 @@ if not DataPetModule or not SharkLogic or not Rayfield then
 end
 
 print("✅ Semua modul berhasil dimuat")
+
+-- ============================================================
+-- KONFIGURASI
+-- ============================================================
+
+local PNP_CFRAME = CFrame.new(-16.6289978, 5.10500336, -64.7269974, 1, 0, 0, 0, 1, 0, 0, 0, 1)
 
 -- ============================================================
 -- FUNGSI BANTUAN
@@ -338,7 +344,7 @@ local function stopLeveling()
 end
 
 -- ============================================================
--- FUNGSI LOGIKA PNP
+-- FUNGSI LOGIKA PNP (tanpa print console)
 -- ============================================================
 
 local function pnpProcessPet(uuid)
@@ -350,11 +356,9 @@ local function pnpProcessPet(uuid)
 
     task.wait(pickupDelay)
     SharkLogic.unequipPet(PetsService, uuid)
-    print("📤 PNP unequip:", uuid)
 
     task.wait(placeDelay)
-    SharkLogic.equipPet(PetsService, uuid, SharkLogic.defaultConfig.slotCFrame)
-    print("📥 PNP equip:", uuid)
+    SharkLogic.equipPet(PetsService, uuid, PNP_CFRAME)
 
     state.pnpProcessing[uuid] = false
 end
@@ -523,7 +527,7 @@ local function resetAllSettings()
 end
 
 -- ============================================================
--- DEKLARASI VARIABEL UI (harus di luar fungsi)
+-- DEKLARASI VARIABEL UI
 -- ============================================================
 
 local StatusLabel
@@ -534,7 +538,7 @@ local TimDropdown, TargetLevelDropdown
 local PnpDropdown
 
 -- ============================================================
--- FUNGSI REFRESH (menggunakan variabel UI yang sudah dideklarasi)
+-- FUNGSI REFRESH
 -- ============================================================
 
 local function updateStatusLabel()
@@ -573,7 +577,6 @@ local function refreshMimicDropdown(filterText)
                 end
             end
         end
-        -- Simpan mapping untuk callback (gunakan closure)
         _G._mimicMap = labelToUUID
     end
 end
@@ -816,7 +819,6 @@ local SharkTab = Window:CreateTab("Auto Shark")
 
 StatusLabel = SharkTab:CreateLabel("Mimic: (belum) | Shark: (belum) | Target: 0 terpilih")
 
--- Mimic
 SharkTab:CreateInput({
     Name = "🔍 Cari Mimic",
     PlaceholderText = "Filter...",
@@ -843,7 +845,6 @@ MimicDropdown = SharkTab:CreateDropdown({
     end
 })
 
--- Shark
 SharkTab:CreateInput({
     Name = "🔍 Cari Shark",
     PlaceholderText = "Filter...",
@@ -870,7 +871,6 @@ SharkDropdown = SharkTab:CreateDropdown({
     end
 })
 
--- Target
 SharkTab:CreateInput({
     Name = "🔍 Cari Target",
     PlaceholderText = "Filter...",
@@ -898,7 +898,6 @@ TargetDropdown = SharkTab:CreateDropdown({
     end
 })
 
--- Tumbal
 TumbalInput = SharkTab:CreateInput({
     Name = "Nama Tumbal (pisah koma)",
     PlaceholderText = "Contoh: Dog, Golden Lab, Black Bunny",
@@ -918,7 +917,6 @@ TumbalInput = SharkTab:CreateInput({
     end
 })
 
--- Min Level
 MinLevelSlider = SharkTab:CreateSlider({
     Name = "Min Level Tumbal",
     Range = {0, 500},
@@ -931,7 +929,6 @@ MinLevelSlider = SharkTab:CreateSlider({
     end
 })
 
--- Refresh
 SharkTab:CreateButton({
     Name = "🔄 Refresh Daftar Pet",
     Callback = function()
@@ -944,7 +941,6 @@ SharkTab:CreateButton({
     end
 })
 
--- Start/Stop Shark
 SharkToggle = SharkTab:CreateToggle({
     Name = "▶️ Start / Stop Shark",
     CurrentValue = false,
@@ -999,7 +995,6 @@ SharkToggle = SharkTab:CreateToggle({
 
 local LevelingTab = Window:CreateTab("Auto Leveling")
 
--- Tim
 LevelingTab:CreateInput({
     Name = "🔍 Cari Tim",
     PlaceholderText = "Filter...",
@@ -1034,7 +1029,6 @@ TimDropdown = LevelingTab:CreateDropdown({
     end
 })
 
--- Target Leveling
 LevelingTab:CreateInput({
     Name = "🔍 Cari Target Leveling",
     PlaceholderText = "Filter...",
@@ -1066,7 +1060,6 @@ TargetLevelDropdown = LevelingTab:CreateDropdown({
     end
 })
 
--- Target Level Slider
 TargetLevelSlider = LevelingTab:CreateSlider({
     Name = "Target Level",
     Range = {0, 500},
@@ -1084,7 +1077,6 @@ TargetLevelSlider = LevelingTab:CreateSlider({
     end
 })
 
--- Start/Stop Leveling
 LevelingToggle = LevelingTab:CreateToggle({
     Name = "▶️ Start / Stop Leveling",
     CurrentValue = false,
@@ -1225,7 +1217,7 @@ SettingsTab:CreateButton({
 })
 
 -- ============================================================
--- INISIALISASI AKHIR
+-- INISIALISASI
 -- ============================================================
 
 refreshAllUI()
