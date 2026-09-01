@@ -1,5 +1,5 @@
 -- ============================================================
--- Auto Shark - Main Entry (FINAL)
+-- Auto Shark - Main Entry (FINAL - Multiple Target Queue)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -19,7 +19,7 @@ end
 print("✅ Semua modul berhasil dimuat")
 
 -- ============================================================
--- STATE
+-- STATE GLOBAL
 -- ============================================================
 
 local state = {
@@ -27,8 +27,8 @@ local state = {
     isProcessing = false,
     selectedMimicUUID = nil,
     selectedSharkUUID = nil,
-    selectedTargetUUID = nil,     -- UUID target yang dipilih dari dropdown
-    targetName = "Mimic Octopus", -- untuk keperluan log
+    targetQueue = {},          -- daftar UUID target (multiple)
+    currentTargetIndex = 1,    -- indeks target yang sedang diproses
     tumbalNames = {"Dog"},
     minLevel = 100,
     currentTumbalUUID = nil,
@@ -65,17 +65,34 @@ local function unequipTargetAndEquipShark()
     state.isProcessing = false
 end
 
+local function getNextTarget()
+    if #state.targetQueue == 0 then
+        print("⚠️ Tidak ada target dalam antrian")
+        return nil
+    end
+    local target = state.targetQueue[state.currentTargetIndex]
+    -- Maju ke target berikutnya (cycle)
+    state.currentTargetIndex = state.currentTargetIndex + 1
+    if state.currentTargetIndex > #state.targetQueue then
+        state.currentTargetIndex = 1  -- loop kembali ke awal
+    end
+    return target
+end
+
 local function unequipSharkAndEquipTumbalTarget()
     if not state.selectedSharkUUID then
         print("⚠️ Shark belum dipilih")
         return
     end
-    if not state.selectedTargetUUID then
-        print("⚠️ Target belum dipilih")
+
+    local targetUUID = getNextTarget()
+    if not targetUUID then
+        print("⚠️ Tidak ada target tersedia")
+        SharkLogic.equipPet(PetsService, state.selectedSharkUUID, SharkLogic.defaultConfig.slotCFrame)
+        state.isProcessing = false
         return
     end
 
-    -- Cari tumbal (Blossoming, non-fav, minLevel)
     local tumbalUUID = SharkLogic.findTumbal(
         DataPetModule,
         state.tumbalNames,
@@ -83,14 +100,14 @@ local function unequipSharkAndEquipTumbalTarget()
         state.minLevel or 0
     )
 
-    if tumbalUUID and state.selectedTargetUUID then
+    if tumbalUUID and targetUUID then
         SharkLogic.unequipPet(PetsService, state.selectedSharkUUID)
         SharkLogic.equipPet(PetsService, tumbalUUID, SharkLogic.defaultConfig.slotCFrame)
         state.currentTumbalUUID = tumbalUUID
-        SharkLogic.equipPet(PetsService, state.selectedTargetUUID, SharkLogic.defaultConfig.slotCFrame)
-        state.currentTargetUUID = state.selectedTargetUUID
+        SharkLogic.equipPet(PetsService, targetUUID, SharkLogic.defaultConfig.slotCFrame)
+        state.currentTargetUUID = targetUUID
         state.isProcessing = true
-        print("✅ Equip tumbal & target")
+        print("✅ Equip tumbal & target (target #" .. state.currentTargetIndex .. "/" .. #state.targetQueue .. ")")
     else
         print("⚠️ Tumbal atau target tidak ditemukan")
         SharkLogic.equipPet(PetsService, state.selectedSharkUUID, SharkLogic.defaultConfig.slotCFrame)
@@ -147,7 +164,25 @@ NotificationEvent.OnClientEvent:Connect(function(message)
 end)
 
 -- ============================================================
--- UI
+-- WEIGHT ESTIMATION
+-- ============================================================
+
+local WEIGHT_GROWTH_RATE = 0.5599
+
+local function estimateWeight(baseWeight, level)
+    baseWeight = baseWeight or 0
+    level = level or 1
+    return baseWeight + (level - 1) * WEIGHT_GROWTH_RATE
+end
+
+local function formatPetLabel(pet)
+    local rawBaseWeight = (pet.petData and pet.petData.BaseWeight) or 0
+    local estimatedWeight = estimateWeight(rawBaseWeight, pet.level)
+    return string.format("%s %s %.2f KG Lv.%d", pet.mutation, pet.name, estimatedWeight, pet.level)
+end
+
+-- ============================================================
+-- UI (Rayfield)
 -- ============================================================
 
 local Window = Rayfield:CreateWindow({
@@ -166,55 +201,41 @@ local Window = Rayfield:CreateWindow({
 
 local MainTab = Window:CreateTab("Auto Shark")
 
--- Helper: format label pet (pakai estimasi weight)
-local function formatPetLabel(pet)
-    return string.format("%s %s %.2f KG Lv.%d", pet.mutation, pet.name, pet.weight or 0, pet.level)
-end
-
--- Helper: cari pet favorit berdasarkan keyword
-local function getFavoritesByKeyword(keyword)
-    return DataPetModule.findPets({ name = keyword, isFavorite = true })
-end
-
--- Label status
-local StatusLabel = MainTab:CreateLabel("Mimic: (belum dipilih) | Shark: (belum dipilih) | Target: (belum dipilih)")
+-- Status label
+local StatusLabel = MainTab:CreateLabel("Mimic: (belum) | Shark: (belum) | Target: 0 terpilih")
 
 local function updateStatusLabel()
-    local mimicText = state.selectedMimicUUID and tostring(state.selectedMimicUUID) or "(belum dipilih)"
-    local sharkText = state.selectedSharkUUID and tostring(state.selectedSharkUUID) or "(belum dipilih)"
-    local targetText = state.selectedTargetUUID and tostring(state.selectedTargetUUID) or "(belum dipilih)"
-    StatusLabel:Set("Mimic: " .. mimicText .. " | Shark: " .. sharkText .. " | Target: " .. targetText)
+    local mimicText = state.selectedMimicUUID and tostring(state.selectedMimicUUID) or "(belum)"
+    local sharkText = state.selectedSharkUUID and tostring(state.selectedSharkUUID) or "(belum)"
+    local targetCount = #state.targetQueue
+    StatusLabel:Set("Mimic: " .. mimicText .. " | Shark: " .. sharkText .. " | Target: " .. targetCount .. " terpilih")
 end
 
 -- ============================================================
--- DROPDOWN MIMIC
+-- DROPDOWN MIMIC (Single Select)
 -- ============================================================
 
 local mimicLabelToUUID = {}
-
 local MimicDropdown = MainTab:CreateDropdown({
     Name = "Pilih Mimic",
     Options = {"Memuat data..."},
     CurrentOption = "Memuat data...",
     MultipleOptions = false,
     Callback = function(option)
-        local selectedLabel = option
-        if type(option) == "table" then
-            selectedLabel = option[1]
-        end
+        local selectedLabel = (type(option) == "table") and option[1] or option
         local uuid = mimicLabelToUUID[selectedLabel]
         if uuid then
             state.selectedMimicUUID = uuid
             print("✅ Mimic dipilih:", selectedLabel, "UUID:", uuid)
             updateStatusLabel()
         else
-            warn("⚠️ UUID tidak ditemukan untuk label:", tostring(selectedLabel))
+            warn("⚠️ UUID tidak ditemukan")
         end
     end
 })
 
 local function refreshMimicDropdown()
-    local hasil = getFavoritesByKeyword("Mimic")
+    local hasil = DataPetModule.findPets({ name = "Mimic", isFavorite = true })
     local options = {}
     mimicLabelToUUID = {}
     for _, pet in ipairs(hasil) do
@@ -225,41 +246,35 @@ local function refreshMimicDropdown()
         table.insert(options, label)
         mimicLabelToUUID[label] = pet.uuid
     end
-    if #options == 0 then
-        options = {"❌ Tidak ada Mimic favorit"}
-    end
+    if #options == 0 then options = {"❌ Tidak ada Mimic favorit"} end
     MimicDropdown:Refresh(options)
 end
 
 -- ============================================================
--- DROPDOWN SHARK
+-- DROPDOWN SHARK (Single Select)
 -- ============================================================
 
 local sharkLabelToUUID = {}
-
 local SharkDropdown = MainTab:CreateDropdown({
     Name = "Pilih Shark",
     Options = {"Memuat data..."},
     CurrentOption = "Memuat data...",
     MultipleOptions = false,
     Callback = function(option)
-        local selectedLabel = option
-        if type(option) == "table" then
-            selectedLabel = option[1]
-        end
+        local selectedLabel = (type(option) == "table") and option[1] or option
         local uuid = sharkLabelToUUID[selectedLabel]
         if uuid then
             state.selectedSharkUUID = uuid
             print("✅ Shark dipilih:", selectedLabel, "UUID:", uuid)
             updateStatusLabel()
         else
-            warn("⚠️ UUID tidak ditemukan untuk label:", tostring(selectedLabel))
+            warn("⚠️ UUID tidak ditemukan")
         end
     end
 })
 
 local function refreshSharkDropdown()
-    local hasil = getFavoritesByKeyword("Shark")
+    local hasil = DataPetModule.findPets({ name = "Shark", isFavorite = true })
     local options = {}
     sharkLabelToUUID = {}
     for _, pet in ipairs(hasil) do
@@ -270,37 +285,32 @@ local function refreshSharkDropdown()
         table.insert(options, label)
         sharkLabelToUUID[label] = pet.uuid
     end
-    if #options == 0 then
-        options = {"❌ Tidak ada Shark favorit"}
-    end
+    if #options == 0 then options = {"❌ Tidak ada Shark favorit"} end
     SharkDropdown:Refresh(options)
 end
 
 -- ============================================================
--- DROPDOWN TARGET (Non-Fav, Mutasi Normal)
+-- DROPDOWN TARGET (Multiple Select)
 -- ============================================================
 
 local targetLabelToUUID = {}
-
 local TargetDropdown = MainTab:CreateDropdown({
-    Name = "Pilih Target (Non-Fav, Mutasi Normal)",
+    Name = "Pilih Target (Multiple, Non-Fav, Normal)",
     Options = {"Memuat data..."},
     CurrentOption = "Memuat data...",
-    MultipleOptions = true,
-    Callback = function(option)
-        local selectedLabel = option
-        if type(option) == "table" then
-            selectedLabel = option[1]
+    MultipleOptions = true,  -- <--- MULTIPLE SELECT
+    Callback = function(selectedLabels)
+        -- selectedLabels berupa table of string (label)
+        state.targetQueue = {}
+        for _, label in ipairs(selectedLabels) do
+            local uuid = targetLabelToUUID[label]
+            if uuid then
+                table.insert(state.targetQueue, uuid)
+            end
         end
-        local uuid = targetLabelToUUID[selectedLabel]
-        if uuid then
-            state.selectedTargetUUID = uuid
-            state.targetName = selectedLabel
-            print("✅ Target dipilih:", selectedLabel, "UUID:", uuid)
-            updateStatusLabel()
-        else
-            warn("⚠️ UUID tidak ditemukan untuk label:", tostring(selectedLabel))
-        end
+        state.currentTargetIndex = 1
+        print("✅ Target dipilih:", #state.targetQueue, "pet")
+        updateStatusLabel()
     end
 })
 
@@ -311,10 +321,8 @@ local function refreshTargetDropdown()
         mutation = "Normal",
         excludeUUIDs = {state.selectedMimicUUID, state.selectedSharkUUID}
     })
-
     local options = {}
     targetLabelToUUID = {}
-
     for _, pet in ipairs(hasil) do
         local label = formatPetLabel(pet)
         if targetLabelToUUID[label] then
@@ -323,16 +331,50 @@ local function refreshTargetDropdown()
         table.insert(options, label)
         targetLabelToUUID[label] = pet.uuid
     end
-
-    if #options == 0 then
-        options = {"❌ Tidak ada target yang memenuhi syarat"}
-    end
-
+    if #options == 0 then options = {"❌ Tidak ada target"} end
     TargetDropdown:Refresh(options)
 end
 
 -- ============================================================
--- TOMBOL REFRESH
+-- TUMBAL (Input Text, Multiple Nama)
+-- ============================================================
+
+MainTab:CreateInput({
+    Name = "Nama Tumbal (pisah koma)",
+    PlaceholderText = "Contoh: Dog, Cat, Bunny",
+    CurrentValue = table.concat(state.tumbalNames, ", "),
+    Callback = function(Value)
+        if Value and Value ~= "" then
+            local names = {}
+            for token in string.gmatch(Value, "[^, ]+") do
+                if token ~= "" then table.insert(names, token) end
+            end
+            if #names > 0 then
+                state.tumbalNames = names
+                print("✅ Tumbal diubah:", table.concat(names, ", "))
+            end
+        end
+    end
+})
+
+-- ============================================================
+-- SLIDER MIN LEVEL TUMBAL
+-- ============================================================
+
+MainTab:CreateSlider({
+    Name = "Min Level Tumbal",
+    Range = {0, 500},
+    Increment = 1,
+    Suffix = "Level",
+    CurrentValue = state.minLevel,
+    Callback = function(value)
+        state.minLevel = value
+        print("📊 Min Level Tumbal:", value)
+    end
+})
+
+-- ============================================================
+-- REFRESH BUTTON
 -- ============================================================
 
 MainTab:CreateButton({
@@ -345,47 +387,7 @@ MainTab:CreateButton({
 })
 
 -- ============================================================
--- SLIDER MIN LEVEL TUMBAL
--- ============================================================
-
-MainTab:CreateSlider({
-    Name = "Min Level Tumbal",
-    Range = {0, 500},
-    Increment = 1,
-    Suffix = " Level",
-    CurrentValue = state.minLevel,
-    Callback = function(value)
-        state.minLevel = value
-        print("[UI] Min Level Tumbal:", value)
-    end
-})
-
--- ============================================================
--- INPUT TUMBAL
--- ============================================================
-
-MainTab:CreateInput({
-    Name = "Nama Tumbal (pisah koma)",
-    PlaceholderText = "Contoh: Dog, Cat, Golden Lab",
-    CurrentValue = table.concat(state.tumbalNames, ", "),
-    Callback = function(Value)
-        if Value and Value ~= "" then
-            local names = {}
-            for token in string.gmatch(Value, "[^, ]+") do
-                if token ~= "" then
-                    table.insert(names, token)
-                end
-            end
-            if #names > 0 then
-                state.tumbalNames = names
-                print("✅ Tumbal diubah:", table.concat(names, ", "))
-            end
-        end
-    end
-})
-
--- ============================================================
--- TOGGLE START/STOP
+-- START / STOP TOGGLE
 -- ============================================================
 
 local StartToggle
@@ -404,13 +406,13 @@ StartToggle = MainTab:CreateToggle({
                 if StartToggle then StartToggle:Set(false) end
                 return
             end
-            if not state.selectedTargetUUID then
-                print("⚠️ Pilih Target dulu!")
+            if #state.targetQueue == 0 then
+                print("⚠️ Pilih target dulu (multiple)!")
                 if StartToggle then StartToggle:Set(false) end
                 return
             end
             state.isActive = true
-            print("▶️ Script dimulai")
+            print("▶️ Script dimulai dengan", #state.targetQueue, "target")
             SharkLogic.equipPet(PetsService, state.selectedMimicUUID, SharkLogic.defaultConfig.slotCFrame)
             SharkLogic.equipPet(PetsService, state.selectedSharkUUID, SharkLogic.defaultConfig.slotCFrame)
         else
@@ -434,5 +436,6 @@ StartToggle = MainTab:CreateToggle({
 refreshMimicDropdown()
 refreshSharkDropdown()
 refreshTargetDropdown()
+updateStatusLabel()
 
-print("✅ Auto Shark siap. Tekan K untuk membuka UI.")
+print("✅ Auto Shark siap (Multiple Target). Tekan K untuk membuka UI.")
