@@ -24,7 +24,6 @@ print("✅ Semua modul berhasil dimuat")
 
 -- Format label pet: Mutasi Nama Berat KG Lv.Level
 local function formatPetLabel(pet)
-    -- Gunakan pet.mutation dari module (sudah diterjemahkan)
     local mut = pet.mutation or "Normal"
     local name = pet.name or "Unknown"
     local weight = pet.weight or 0
@@ -53,11 +52,11 @@ local state = {
 
     -- Auto Leveling
     isLevelingActive = false,
-    levelingTim = {},       -- daftar UUID tim (max 7)
-    levelingTargets = {},   -- daftar UUID target
+    levelingTim = {},
+    levelingTargets = {},
     targetLevel = 100,
     currentLevelingTargetIndex = 1,
-    currentLevelingTimIndex = 1,
+    currentLevelingTargetUUID = nil,
 }
 
 -- ============================================================
@@ -138,7 +137,7 @@ end
 -- ============================================================
 
 local function unequipAllGardenPets()
-    local data = DataPetModule:getAllPets()
+    local data = DataPetModule.getAllPets()
     if not data then return end
     local equipped = data.PetsData and data.PetsData.EquippedPets
     if equipped and type(equipped) == "table" then
@@ -149,7 +148,7 @@ local function unequipAllGardenPets()
 end
 
 local function getPetLevel(uuid)
-    local data = DataPetModule:getAllPets()
+    local data = DataPetModule.getAllPets()
     if not data then return 0 end
     local pet = data[uuid]
     if pet and pet.PetData then
@@ -166,7 +165,6 @@ local function unequipLevelingTarget()
 end
 
 local function equipLevelingTim()
-    -- Equip semua tim (max 7) secara berurutan
     for _, uuid in ipairs(state.levelingTim) do
         SharkLogic.equipPet(PetsService, uuid, SharkLogic.defaultConfig.slotCFrame)
     end
@@ -175,50 +173,40 @@ end
 local function processLeveling()
     if not state.isLevelingActive then return end
 
-    -- 1. Cek apakah ada target dalam antrian
     if #state.levelingTargets == 0 then
         print("✅ Semua target selesai")
         state.isLevelingActive = false
         return
     end
 
-    -- Ambil target saat ini
     local targetUUID = state.levelingTargets[state.currentLevelingTargetIndex]
     if not targetUUID then
-        -- jika indeks melewati batas, reset ke awal (loop)
         state.currentLevelingTargetIndex = 1
         targetUUID = state.levelingTargets[1]
     end
 
-    -- Cek level target
     local currentLevel = getPetLevel(targetUUID)
     if currentLevel >= state.targetLevel then
-        -- Target sudah mencapai level target, lewati
         print("✅ Target sudah mencapai level", state.targetLevel, "- lewati")
         unequipLevelingTarget()
         state.currentLevelingTargetIndex = state.currentLevelingTargetIndex + 1
         if state.currentLevelingTargetIndex > #state.levelingTargets then
             state.currentLevelingTargetIndex = 1
         end
-        -- Lanjut ke target berikutnya
         task.spawn(processLeveling)
         return
     end
 
-    -- Jika target belum mencapai level, pastikan target di-equip
     if state.currentLevelingTargetUUID ~= targetUUID then
-        -- Unequip target lama jika ada
         unequipLevelingTarget()
-        -- Equip target baru
         SharkLogic.equipPet(PetsService, targetUUID, SharkLogic.defaultConfig.slotCFrame)
         state.currentLevelingTargetUUID = targetUUID
         print("📈 Equip target leveling:", targetUUID, "Level:", currentLevel, "/", state.targetLevel)
     end
 
-    -- Cek level setiap beberapa detik (disini kita loop dengan task.wait)
-    task.wait(2) -- cek tiap 2 detik
+    task.wait(2)
     if state.isLevelingActive then
-        processLeveling() -- rekursif
+        processLeveling()
     end
 end
 
@@ -232,15 +220,11 @@ local function startLeveling()
         return
     end
 
-    -- Bersihkan garden
     unequipAllGardenPets()
     task.wait(0.5)
-
-    -- Equip tim
     equipLevelingTim()
     print("✅ Tim leveling di-equip")
 
-    -- Reset indeks target
     state.currentLevelingTargetIndex = 1
     state.isLevelingActive = true
     print("▶️ Auto Leveling dimulai")
@@ -261,7 +245,6 @@ end
 local isHandlingCooldownEvent = false
 
 PetCooldownsEvent.OnClientEvent:Connect(function(petId, dataArray)
-    -- Auto Shark
     if state.isActive and petId == state.selectedMimicUUID and not isHandlingCooldownEvent then
         local time = nil
         for _, entry in ipairs(dataArray) do
@@ -290,7 +273,6 @@ PetCooldownsEvent.OnClientEvent:Connect(function(petId, dataArray)
 end)
 
 NotificationEvent.OnClientEvent:Connect(function(message)
-    -- Auto Shark
     if state.isActive and state.isProcessing and type(message) == "string" and string.find(message, "Mimic Octopus") then
         if string.find(message, "spat its Blossoming mutation onto") or string.find(message, "mutation failed to transfer") then
             unequipTargetAndEquipShark()
@@ -331,7 +313,7 @@ local function updateStatusLabel()
     StatusLabel:Set("Mimic: " .. mimicText .. " | Shark: " .. sharkText .. " | Target: " .. targetCount .. " terpilih")
 end
 
--- Dropdown Mimic
+-- Dropdown Mimic (Favorit, mengandung "Mimic")
 local mimicLabelToUUID = {}
 local MimicDropdown = SharkTab:CreateDropdown({
     Name = "Pilih Mimic",
@@ -363,7 +345,7 @@ local function refreshMimicDropdown()
     MimicDropdown:Refresh(options)
 end
 
--- Dropdown Shark
+-- Dropdown Shark (Favorit, mengandung "Shark")
 local sharkLabelToUUID = {}
 local SharkDropdown = SharkTab:CreateDropdown({
     Name = "Pilih Shark",
@@ -395,7 +377,7 @@ local function refreshSharkDropdown()
     SharkDropdown:Refresh(options)
 end
 
--- Dropdown Target (Multiple)
+-- Dropdown Target (Multiple, Non-Fav, Mutasi Normal)
 local targetLabelToUUID = {}
 local TargetDropdown = SharkTab:CreateDropdown({
     Name = "Pilih Target (Multiple, Non-Fav, Normal)",
@@ -441,7 +423,6 @@ SharkTab:CreateInput({
     Callback = function(Value)
         if Value and Value ~= "" then
             local names = {}
-            -- Split dengan koma, trim spasi
             for token in string.gmatch(Value, "[^,]+") do
                 local trimmed = token:match("^%s*(.-)%s*$")
                 if trimmed ~= "" then table.insert(names, trimmed) end
