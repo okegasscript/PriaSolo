@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - FINAL (Rayfield v1, perbaikan metode)
+-- Pria Solo HUB - FINAL (Perbaikan Urutan Deklarasi)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -96,7 +96,7 @@ local PetsService = GameEvents:WaitForChild("PetsService")
 local NotificationEvent = GameEvents:WaitForChild("Notification")
 
 -- ============================================================
--- FUNGSI UNEQUIP SELEKTIF (sama seperti sebelumnya)
+-- FUNGSI UNEQUIP SELEKTIF
 -- ============================================================
 
 local function unequipAllGardenPets(keepUUIDs, timeout)
@@ -149,7 +149,7 @@ local function unequipAllGardenPets(keepUUIDs, timeout)
 end
 
 -- ============================================================
--- FUNGSI LOGIKA AUTO SHARK (sama seperti sebelumnya)
+-- FUNGSI LOGIKA AUTO SHARK
 -- ============================================================
 
 local function unequipTargetAndEquipShark()
@@ -219,7 +219,7 @@ local function unequipSharkAndEquipTumbalTarget()
 end
 
 -- ============================================================
--- FUNGSI LOGIKA AUTO LEVELING (sama seperti sebelumnya)
+-- FUNGSI LOGIKA AUTO LEVELING
 -- ============================================================
 
 local function getPetLevel(uuid)
@@ -420,106 +420,7 @@ NotificationEvent.OnClientEvent:Connect(function(message)
 end)
 
 -- ============================================================
--- SAVE / LOAD (menggunakan writefile/readfile, independen dari Rayfield)
--- ============================================================
-
-local function saveConfig()
-    local config = {
-        selectedMimicUUID = state.selectedMimicUUID,
-        selectedSharkUUID = state.selectedSharkUUID,
-        targetQueue = state.targetQueue,
-        tumbalNames = state.tumbalNames,
-        minLevel = state.minLevel,
-        levelingTim = state.levelingTim,
-        levelingTargets = state.levelingTargets,
-        targetLevel = state.targetLevel,
-        pnpPets = state.pnpPets,
-        pnpPickupDelay = state.pnpPickupDelay,
-        pnpPlaceDelay = state.pnpPlaceDelay,
-        timestamp = os.time()
-    }
-    local json = HttpService:JSONEncode(config)
-    local success, err = pcall(function()
-        writefile(CONFIG_FILE, json)
-    end)
-    if success then
-        print("✅ Konfigurasi disimpan ke " .. CONFIG_FILE)
-    else
-        warn("❌ Gagal menyimpan: " .. tostring(err))
-    end
-end
-
-local function loadConfig()
-    local success, data = pcall(function()
-        return readfile(CONFIG_FILE)
-    end)
-    if not success then
-        print("ℹ️ File konfigurasi tidak ditemukan, gunakan default.")
-        return
-    end
-    local decoded = HttpService:JSONDecode(data)
-    if decoded then
-        state.selectedMimicUUID = decoded.selectedMimicUUID
-        state.selectedSharkUUID = decoded.selectedSharkUUID
-        state.targetQueue = decoded.targetQueue or {}
-        state.tumbalNames = decoded.tumbalNames or {"Dog"}
-        state.minLevel = decoded.minLevel or 100
-        state.levelingTim = decoded.levelingTim or {}
-        state.levelingTargets = decoded.levelingTargets or {}
-        state.targetLevel = decoded.targetLevel or 100
-        state.pnpPets = decoded.pnpPets or {}
-        state.pnpPickupDelay = decoded.pnpPickupDelay or 0.6
-        state.pnpPlaceDelay = decoded.pnpPlaceDelay or 0
-        print("✅ Konfigurasi dimuat dari " .. CONFIG_FILE)
-        refreshAllUI()
-    else
-        warn("❌ Gagal memuat file.")
-    end
-end
-
-local function resetAllSettings()
-    if state.isSharkActive then
-        state.isSharkActive = false
-        unequipTargetAndEquipShark()
-        unequipAllGardenPets({}, 1.0)
-        if state.selectedMimicUUID then
-            SharkLogic.unequipPet(PetsService, state.selectedMimicUUID)
-        end
-        if state.selectedSharkUUID then
-            SharkLogic.unequipPet(PetsService, state.selectedSharkUUID)
-        end
-        if SharkToggle then SharkToggle:Set(false) end
-    end
-    if state.isLevelingActive then
-        stopLeveling()
-        if LevelingToggle then LevelingToggle:Set(false) end
-    end
-    if state.pnpActive then
-        state.pnpActive = false
-        for uuid, _ in pairs(state.pnpProcessing) do
-            state.pnpProcessing[uuid] = false
-        end
-        if PnpToggle then PnpToggle:Set(false) end
-    end
-
-    state.selectedMimicUUID = nil
-    state.selectedSharkUUID = nil
-    state.targetQueue = {}
-    state.levelingTim = {}
-    state.levelingTargets = {}
-    state.pnpPets = {}
-    state.tumbalNames = {"Dog"}
-    state.minLevel = 100
-    state.targetLevel = 100
-    state.pnpPickupDelay = 0.6
-    state.pnpPlaceDelay = 0
-
-    refreshAllUI()
-    print("🔄 Semua pengaturan direset ke default.")
-end
-
--- ============================================================
--- DEKLARASI VARIABEL UI
+-- DEKLARASI VARIABEL UI (akan diisi nanti)
 -- ============================================================
 
 local Window
@@ -531,7 +432,7 @@ local TimDropdown, TargetLevelDropdown
 local PnpDropdown
 
 -- ============================================================
--- FUNGSI REFRESH (dengan perbaikan metode Rayfield v1)
+-- FUNGSI REFRESH (didefinisikan di sini, sebelum loadConfig)
 -- ============================================================
 
 local function updateStatusLabel()
@@ -561,7 +462,6 @@ local function refreshMimicDropdown(filterText)
     table.sort(options, sortAlphabetically)
     if #options == 0 then options = {"❌ Tidak ada Mimic favorit"} end
     if MimicDropdown then
-        -- Rayfield v1: Refresh untuk mengganti opsi
         MimicDropdown:Refresh(options)
         if currentUUID then
             for label, uuid in pairs(labelToUUID) do
@@ -765,7 +665,7 @@ local function refreshPnpDropdown(filterText)
 end
 
 -- ============================================================
--- REFRESH ALL UI
+-- REFRESH ALL UI (didefinisikan sebelum loadConfig dipakai)
 -- ============================================================
 
 local function refreshAllUI()
@@ -788,13 +688,112 @@ local function refreshAllUI()
 end
 
 -- ============================================================
+-- SAVE / LOAD (sekarang refreshAllUI sudah ada)
+-- ============================================================
+
+local function saveConfig()
+    local config = {
+        selectedMimicUUID = state.selectedMimicUUID,
+        selectedSharkUUID = state.selectedSharkUUID,
+        targetQueue = state.targetQueue,
+        tumbalNames = state.tumbalNames,
+        minLevel = state.minLevel,
+        levelingTim = state.levelingTim,
+        levelingTargets = state.levelingTargets,
+        targetLevel = state.targetLevel,
+        pnpPets = state.pnpPets,
+        pnpPickupDelay = state.pnpPickupDelay,
+        pnpPlaceDelay = state.pnpPlaceDelay,
+        timestamp = os.time()
+    }
+    local json = HttpService:JSONEncode(config)
+    local success, err = pcall(function()
+        writefile(CONFIG_FILE, json)
+    end)
+    if success then
+        print("✅ Konfigurasi disimpan ke " .. CONFIG_FILE)
+    else
+        warn("❌ Gagal menyimpan: " .. tostring(err))
+    end
+end
+
+local function loadConfig()
+    local success, data = pcall(function()
+        return readfile(CONFIG_FILE)
+    end)
+    if not success then
+        print("ℹ️ File konfigurasi tidak ditemukan, gunakan default.")
+        return
+    end
+    local decoded = HttpService:JSONDecode(data)
+    if decoded then
+        state.selectedMimicUUID = decoded.selectedMimicUUID
+        state.selectedSharkUUID = decoded.selectedSharkUUID
+        state.targetQueue = decoded.targetQueue or {}
+        state.tumbalNames = decoded.tumbalNames or {"Dog"}
+        state.minLevel = decoded.minLevel or 100
+        state.levelingTim = decoded.levelingTim or {}
+        state.levelingTargets = decoded.levelingTargets or {}
+        state.targetLevel = decoded.targetLevel or 100
+        state.pnpPets = decoded.pnpPets or {}
+        state.pnpPickupDelay = decoded.pnpPickupDelay or 0.6
+        state.pnpPlaceDelay = decoded.pnpPlaceDelay or 0
+        print("✅ Konfigurasi dimuat dari " .. CONFIG_FILE)
+        refreshAllUI()
+    else
+        warn("❌ Gagal memuat file.")
+    end
+end
+
+local function resetAllSettings()
+    if state.isSharkActive then
+        state.isSharkActive = false
+        unequipTargetAndEquipShark()
+        unequipAllGardenPets({}, 1.0)
+        if state.selectedMimicUUID then
+            SharkLogic.unequipPet(PetsService, state.selectedMimicUUID)
+        end
+        if state.selectedSharkUUID then
+            SharkLogic.unequipPet(PetsService, state.selectedSharkUUID)
+        end
+        if SharkToggle then SharkToggle:Set(false) end
+    end
+    if state.isLevelingActive then
+        stopLeveling()
+        if LevelingToggle then LevelingToggle:Set(false) end
+    end
+    if state.pnpActive then
+        state.pnpActive = false
+        for uuid, _ in pairs(state.pnpProcessing) do
+            state.pnpProcessing[uuid] = false
+        end
+        if PnpToggle then PnpToggle:Set(false) end
+    end
+
+    state.selectedMimicUUID = nil
+    state.selectedSharkUUID = nil
+    state.targetQueue = {}
+    state.levelingTim = {}
+    state.levelingTargets = {}
+    state.pnpPets = {}
+    state.tumbalNames = {"Dog"}
+    state.minLevel = 100
+    state.targetLevel = 100
+    state.pnpPickupDelay = 0.6
+    state.pnpPlaceDelay = 0
+
+    refreshAllUI()
+    print("🔄 Semua pengaturan direset ke default.")
+end
+
+-- ============================================================
 -- UI (Rayfield v1)
 -- ============================================================
 
 Window = Rayfield:CreateWindow({
     Name = "Pria Solo HUB",
     ConfigurationSaving = {
-        Enabled = false, -- kita tidak pakai fitur save bawaan Rayfield
+        Enabled = false, -- kita pakai save manual lewat writefile
         FolderName = "PriaSolo",
         FileName = "Settings"
     },
@@ -1209,7 +1208,7 @@ SettingsTab:CreateButton({
 })
 
 -- ============================================================
--- INISIALISASI
+-- INISIALISASI AWAL
 -- ============================================================
 
 refreshAllUI()
