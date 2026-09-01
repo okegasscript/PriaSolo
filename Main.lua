@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - FINAL (PNP tanpa print, CFrame khusus)
+-- Pria Solo HUB - FINAL (PNP tanpa print, CFrame default)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -19,12 +19,6 @@ if not DataPetModule or not SharkLogic or not Rayfield then
 end
 
 print("✅ Semua modul berhasil dimuat")
-
--- ============================================================
--- KONFIGURASI
--- ============================================================
-
-local PNP_CFRAME = CFrame.new(-16.6289978, 5.10500336, -64.7269974, 1, 0, 0, 0, 1, 0, 0, 0, 1)
 
 -- ============================================================
 -- FUNGSI BANTUAN
@@ -344,7 +338,7 @@ local function stopLeveling()
 end
 
 -- ============================================================
--- FUNGSI LOGIKA PNP (tanpa print console)
+-- FUNGSI LOGIKA PNP (tanpa print console, CFrame default)
 -- ============================================================
 
 local function pnpProcessPet(uuid)
@@ -356,9 +350,11 @@ local function pnpProcessPet(uuid)
 
     task.wait(pickupDelay)
     SharkLogic.unequipPet(PetsService, uuid)
+    -- no print
 
     task.wait(placeDelay)
-    SharkLogic.equipPet(PetsService, uuid, PNP_CFRAME)
+    SharkLogic.equipPet(PetsService, uuid, SharkLogic.defaultConfig.slotCFrame)  -- menggunakan CFrame default
+    -- no print
 
     state.pnpProcessing[uuid] = false
 end
