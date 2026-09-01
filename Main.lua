@@ -1,12 +1,11 @@
 -- ============================================================
--- Auto Shark - Main Entry (Semua modul di-load dari GitHub)
+-- Auto Shark - Main Entry
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 
--- 1. Load semua modul dari GitHub
 local DataPetModule = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua"))()
 local SharkLogic = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/SharkLogic.lua"))()
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
@@ -18,7 +17,7 @@ end
 
 print("✅ Semua modul berhasil dimuat")
 
--- 2. State global
+-- State global
 local state = {
     isActive = false,
     isProcessing = false,
@@ -32,13 +31,13 @@ local state = {
     lastActionTime = 0
 }
 
--- 3. Ambil event service
+-- Event service
 local GameEvents = ReplicatedStorage:WaitForChild("GameEvents")
 local PetCooldownsEvent = GameEvents:WaitForChild("PetCooldownsUpdated")
 local PetsService = GameEvents:WaitForChild("PetsService")
 local NotificationEvent = GameEvents:WaitForChild("Notification")
 
--- 4. Fungsi logika (equip/unequip)
+-- Fungsi logika (equip/unequip)
 local function unequipTargetAndEquipShark()
     if state.currentTargetUUID then
         SharkLogic.unequipPet(PetsService, state.currentTargetUUID)
@@ -75,7 +74,7 @@ local function unequipSharkAndEquipTumbalTarget()
     end
 end
 
--- 5. Event listener cooldown & notifikasi
+-- Event listener
 PetCooldownsEvent.OnClientEvent:Connect(function(petId, dataArray)
     if not state.isActive then return end
     if petId ~= state.selectedMimicUUID then return end
@@ -108,7 +107,10 @@ NotificationEvent.OnClientEvent:Connect(function(message)
     end
 end)
 
--- 6. UI dengan Rayfield (kompatibel versi sirius.menu/rayfield)
+-- ============================================================
+-- UI
+-- ============================================================
+
 local Window = Rayfield:CreateWindow({
     Name = "Auto Shark",
     LoadingTitle = "Memuat...",
@@ -123,102 +125,101 @@ local Window = Rayfield:CreateWindow({
     AutoSaveConfig = true
 })
 
--- Tab: Team Favorit
-local TabFav = Window:CreateTab("Team Favorit")
+local MainTab = Window:CreateTab("Auto Shark")
 
--- Dropdown untuk daftar pet favorit
-local PetDropdown = TabFav:CreateDropdown({
-    Name = "Daftar Pet Favorit",
-    Options = {"Memuat data..."},
-    CurrentOption = "",
-    Callback = function(Option)
-        if Option and Option ~= "Memuat data..." and Option ~= "❌ Tidak ada pet favorit" then
-            -- Cari pet yang sesuai
-            local hasil = DataPetModule.findPets({ isFavorite = true })
-            for _, pet in ipairs(hasil) do
-                local text = string.format("%s %s %.2f KG Lv.%d",
-                    pet.mutation, pet.name, pet.weight or 0, pet.level)
-                if text == Option then
-                    DetailLabel:Set(string.format("Nama: %s\nMutasi: %s\nLevel: %d\nBerat: %.2f KG",
-                        pet.name, pet.mutation, pet.level, pet.weight or 0))
-                    break
-                end
-            end
-        end
-    end
-})
-
-local DetailLabel = TabFav:CreateLabel("Klik salah satu pet untuk melihat detail")
-
-local function refreshFavorites()
-    if not DataPetModule then
-        PetDropdown:SetOptions({"❌ Module tidak tersedia"})
-        DetailLabel:Set("Module DataPet tidak tersedia")
-        return
-    end
-
-    local hasil = DataPetModule.findPets({ isFavorite = true })
-    local options = {}
-    for _, pet in ipairs(hasil) do
-        local text = string.format("%s %s %.2f KG Lv.%d",
-            pet.mutation, pet.name, pet.weight or 0, pet.level)
-        table.insert(options, text)
-    end
-    if #options == 0 then
-        options = {"❌ Tidak ada pet favorit"}
-    end
-
-    PetDropdown:SetOptions(options)
-    if #options > 0 and options[1] ~= "❌ Tidak ada pet favorit" then
-        PetDropdown:SetCurrentOption(options[1])
-        -- Update detail label otomatis dengan pet pertama
-        local first = hasil[1]
-        if first then
-            DetailLabel:Set(string.format("Nama: %s\nMutasi: %s\nLevel: %d\nBerat: %.2f KG",
-                first.name, first.mutation, first.level, first.weight or 0))
-        end
-    else
-        DetailLabel:Set("Tidak ada pet favorit")
-    end
+-- Helper: format label pet
+local function formatPetLabel(pet)
+    return string.format("%s %s %.2f KG Lv.%d", pet.mutation, pet.name, pet.weight or 0, pet.level)
 end
 
-TabFav:CreateButton({
-    Name = "Refresh Daftar",
-    Callback = refreshFavorites
-})
+-- Helper: cari pet favorit berdasarkan keyword nama (partial match, case-insensitive)
+local function getFavoritesByKeyword(keyword)
+    return DataPetModule.findPets({ name = keyword, isFavorite = true })
+end
 
-refreshFavorites()
+-- Mapping label -> uuid (dipakai ulang saat dropdown callback jalan)
+local mimicLabelToUUID = {}
+local sharkLabelToUUID = {}
 
--- Tab: Kontrol
-local TabControl = Window:CreateTab("Kontrol")
-
--- Input untuk Mimic UUID (atau nanti bisa dropdown, tapi untuk sekarang input)
-TabControl:CreateInput({
-    Name = "Mimic UUID",
-    PlaceholderText = "Masukkan UUID Mimic...",
-    CurrentValue = "",
-    Callback = function(Value)
-        if Value and Value ~= "" then
-            state.selectedMimicUUID = Value
-            print("✅ Mimic UUID di-set:", Value)
+-- 1. Dropdown Mimic (petType mengandung "Mimic", isFavorite = true)
+local MimicDropdown = MainTab:CreateDropdown({
+    Name = "Pilih Mimic",
+    Options = {"Memuat data..."},
+    CurrentOption = {"Memuat data..."},
+    MultipleOptions = false,
+    Callback = function(option)
+        local uuid = mimicLabelToUUID[option]
+        if uuid then
+            state.selectedMimicUUID = uuid
+            print("✅ Mimic dipilih:", option)
         end
     end
 })
 
-TabControl:CreateInput({
-    Name = "Shark UUID",
-    PlaceholderText = "Masukkan UUID Shark...",
-    CurrentValue = "",
-    Callback = function(Value)
-        if Value and Value ~= "" then
-            state.selectedSharkUUID = Value
-            print("✅ Shark UUID di-set:", Value)
+-- 2. Dropdown Shark (petType mengandung "Shark", isFavorite = true)
+local SharkDropdown = MainTab:CreateDropdown({
+    Name = "Pilih Shark",
+    Options = {"Memuat data..."},
+    CurrentOption = {"Memuat data..."},
+    MultipleOptions = false,
+    Callback = function(option)
+        local uuid = sharkLabelToUUID[option]
+        if uuid then
+            state.selectedSharkUUID = uuid
+            print("✅ Shark dipilih:", option)
         end
     end
 })
 
--- Input untuk Target
-TabControl:CreateInput({
+-- Fungsi refresh dropdown Mimic
+local function refreshMimicDropdown()
+    local hasil = getFavoritesByKeyword("Mimic")
+    local options = {}
+    mimicLabelToUUID = {}
+    for _, pet in ipairs(hasil) do
+        local label = formatPetLabel(pet)
+        if mimicLabelToUUID[label] then
+            label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
+        end
+        table.insert(options, label)
+        mimicLabelToUUID[label] = pet.uuid
+    end
+    if #options == 0 then
+        options = {"❌ Tidak ada Mimic favorit"}
+    end
+    MimicDropdown:Refresh(options)
+end
+
+-- Fungsi refresh dropdown Shark
+local function refreshSharkDropdown()
+    local hasil = getFavoritesByKeyword("Shark")
+    local options = {}
+    sharkLabelToUUID = {}
+    for _, pet in ipairs(hasil) do
+        local label = formatPetLabel(pet)
+        if sharkLabelToUUID[label] then
+            label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
+        end
+        table.insert(options, label)
+        sharkLabelToUUID[label] = pet.uuid
+    end
+    if #options == 0 then
+        options = {"❌ Tidak ada Shark favorit"}
+    end
+    SharkDropdown:Refresh(options)
+end
+
+-- Tombol refresh manual (jaga-jaga kalau data telat load)
+MainTab:CreateButton({
+    Name = "🔄 Refresh Daftar Pet",
+    Callback = function()
+        refreshMimicDropdown()
+        refreshSharkDropdown()
+    end
+})
+
+-- Input Target & Tumbal
+MainTab:CreateInput({
     Name = "Nama Target",
     PlaceholderText = "Contoh: Moon Cat",
     CurrentValue = state.targetName,
@@ -230,8 +231,7 @@ TabControl:CreateInput({
     end
 })
 
--- Input untuk Tumbal (bisa multiple, dipisah koma)
-TabControl:CreateInput({
+MainTab:CreateInput({
     Name = "Nama Tumbal (pisah koma)",
     PlaceholderText = "Contoh: Dog, Cat, Golden Lab",
     CurrentValue = table.concat(state.tumbalNames, ", "),
@@ -251,28 +251,30 @@ TabControl:CreateInput({
     end
 })
 
--- Tombol Start/Stop
-local StartStopButton
-StartStopButton = TabControl:CreateButton({
-    Name = "▶️ Start Script",
-    Callback = function()
-        if not state.selectedMimicUUID or not state.selectedSharkUUID then
-            print("⚠️ Set Mimic dan Shark UUID terlebih dahulu")
-            return
-        end
-        state.isActive = not state.isActive
-        if state.isActive then
-            StartStopButton:Set("⏹️ Stop Script")
+-- 3. Toggle Start/Stop (ditaruh paling bawah, elemen terakhir di tab)
+local StartToggle = MainTab:CreateToggle({
+    Name = "▶️ Start / Stop",
+    CurrentValue = false,
+    Callback = function(Value)
+        if Value then
+            if not state.selectedMimicUUID then
+                print("⚠️ Pilih Mimic dulu!")
+                StartToggle:Set(false)
+                return
+            end
+            if not state.selectedSharkUUID then
+                print("⚠️ Pilih Shark dulu!")
+                StartToggle:Set(false)
+                return
+            end
+            state.isActive = true
             print("▶️ Script dimulai")
-            -- Equip Mimic dan Shark di awal
             SharkLogic.equipPet(PetsService, state.selectedMimicUUID, SharkLogic.defaultConfig.slotCFrame)
             SharkLogic.equipPet(PetsService, state.selectedSharkUUID, SharkLogic.defaultConfig.slotCFrame)
         else
-            StartStopButton:Set("▶️ Start Script")
+            state.isActive = false
             print("⏹️ Script dihentikan")
-            -- Unequip semua
             unequipTargetAndEquipShark()
-            -- Unequip juga mimic dan shark jika perlu
             if state.selectedMimicUUID then
                 SharkLogic.unequipPet(PetsService, state.selectedMimicUUID)
             end
@@ -282,5 +284,9 @@ StartStopButton = TabControl:CreateButton({
         end
     end
 })
+
+-- Load awal
+refreshMimicDropdown()
+refreshSharkDropdown()
 
 print("✅ Auto Shark siap. Tekan K untuk membuka UI.")
