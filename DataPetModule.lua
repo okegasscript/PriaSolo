@@ -1,7 +1,9 @@
 -- DataPetModule.lua
 local DataPetModule = {}
 
--- MUTATION MAP yang sudah diperbaiki
+-- ============================================================
+-- MUTATION MAP (sesuai permintaan)
+-- ============================================================
 local MUTATION_MAP = {
     ["@"] = "Blossoming",
     ["J"] = "Oxpecker",
@@ -17,21 +19,62 @@ local MUTATION_MAP = {
     ["Normal"] = "Normal",
 }
 
--- Cari DataService di berbagai lokasi
-local function findDataService()
+-- ============================================================
+-- FUNGSI TERJEMAHAN MUTASI
+-- ============================================================
+function DataPetModule.getAutoMutationName(rawCode)
+    if not rawCode or rawCode == "" then
+        return "Normal"
+    end
+    -- Coba cari di MUTATION_MAP
+    local translated = MUTATION_MAP[rawCode]
+    if translated then
+        return translated
+    end
+    -- Jika tidak ditemukan, coba cari di ReplicatedStorage (fallback)
+    for _, obj in ipairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
+        if obj:IsA("ModuleScript") and (
+            obj.Name:lower():find("mut") or
+            obj.Name:lower():find("pet") or
+            obj.Name:lower():find("config")
+        ) then
+            local success, mod = pcall(require, obj)
+            if success and type(mod) == "table" then
+                for k, v in pairs(mod) do
+                    if tostring(k) == tostring(rawCode) and type(v) == "string" then
+                        return v
+                    elseif tostring(v) == tostring(rawCode) and type(k) == "string" then
+                        return k
+                    elseif type(v) == "table" then
+                        for subK, subV in pairs(v) do
+                            if tostring(subK) == tostring(rawCode) and type(subV) == "string" then
+                                return subV
+                            elseif tostring(subV) == tostring(rawCode) and type(subK) == "string" then
+                                return subK
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return tostring(rawCode)
+end
+
+-- ============================================================
+-- FUNGSI DATA PET
+-- ============================================================
+local function getDataService()
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    -- Coba di Modules
+    -- Coba berbagai lokasi
     local modules = ReplicatedStorage:FindFirstChild("Modules")
     if modules then
         local ds = modules:FindFirstChild("DataService")
         if ds then return require(ds) end
     end
-    -- Coba langsung di ReplicatedStorage
     local ds = ReplicatedStorage:FindFirstChild("DataService")
     if ds then return require(ds) end
-    -- Coba dari _G
     if _G.DataService then return _G.DataService end
-    -- Coba panggil game:GetService
     local success, result = pcall(function()
         return game:GetService("DataService")
     end)
@@ -39,56 +82,38 @@ local function findDataService()
     error("DataService tidak ditemukan")
 end
 
-local DataService = findDataService()
-
--- Ambil semua data pet
 function DataPetModule.getAllPets()
-    local data = DataService:GetData()
+    local data = getDataService():GetData()
     if not data then return {} end
     local inv = data.PetsData and data.PetsData.PetInventory and data.PetsData.PetInventory.Data
     return inv or {}
 end
 
--- Dapatkan UUID pet yang sedang di-equip
 function DataPetModule.getEquippedPets()
-    local data = DataService:GetData()
+    local data = getDataService():GetData()
     if not data then return {} end
     return data.PetsData and data.PetsData.EquippedPets or {}
 end
 
--- Dapatkan detail pet yang sedang di-equip
 function DataPetModule.getEquippedPetDetails()
     local equipped = DataPetModule.getEquippedPets()
-    local inv = DataPetModule.getAllPets()
-    local details = {}
+    local allPets = DataPetModule.getAllPets()
+    local result = {}
     for _, uuid in ipairs(equipped) do
-        local pet = inv[uuid]
+        local pet = allPets[uuid]
         if pet then
-            table.insert(details, {uuid = uuid, pet = pet})
+            table.insert(result, {uuid = uuid, pet = pet})
         end
     end
-    return details
+    return result
 end
 
--- Terjemahkan kode mutasi
-function DataPetModule.getAutoMutationName(rawCode)
-    if not rawCode or rawCode == "" then
-        return "Normal"
-    end
-    return MUTATION_MAP[rawCode] or rawCode
-end
-
--- Fungsi pencarian pet dengan filter
 function DataPetModule.findPets(filter)
     filter = filter or {}
-    local inv = DataPetModule.getAllPets()
+    local allPets = DataPetModule.getAllPets()
     local results = {}
-    local limit = filter.limit or math.huge
-
-    for uuid, pet in pairs(inv) do
-        if #results >= limit then break end
-
-        -- Ekstrak data
+    for uuid, pet in pairs(allPets) do
+        -- Ambil data
         local pData = pet.PetData or {}
         local pType = pet.PetType or pData.PetType or pData.Name or ""
         local mutationRaw = pData.MutationType or "Normal"
@@ -98,114 +123,70 @@ function DataPetModule.findPets(filter)
         local isFavorite = pData.IsFavorite or false
         local passive = pData.Passive or ""
 
-        -- Filter excludeUUIDs
-        if filter.excludeUUIDs and type(filter.excludeUUIDs) == "table" then
-            local excluded = false
-            for _, ex in ipairs(filter.excludeUUIDs) do
-                if ex == uuid then excluded = true break end
-            end
-            if excluded then goto continue end
-        end
+        -- Cek filter
+        local match = true
+        if filter.type and string.lower(pType) ~= string.lower(filter.type) then match = false end
+        if filter.exactName and string.lower(pType) ~= string.lower(filter.exactName) then match = false end
+        if filter.name and not string.find(string.lower(pType), string.lower(filter.name)) then match = false end
+        if filter.mutation and string.lower(mutation) ~= string.lower(filter.mutation) then match = false end
+        if filter.isFavorite ~= nil and isFavorite ~= filter.isFavorite then match = false end
+        if filter.minLevel and level < filter.minLevel then match = false end
+        if filter.maxLevel and level > filter.maxLevel then match = false end
+        if filter.minWeight and weight < filter.minWeight then match = false end
+        if filter.maxWeight and weight > filter.maxWeight then match = false end
+        if filter.excludeUUIDs and table.find(filter.excludeUUIDs, uuid) then match = false end
 
-        -- Filter exactName
-        if filter.exactName and string.lower(pType) ~= string.lower(filter.exactName) then
-            goto continue
+        if match then
+            table.insert(results, {
+                uuid = uuid,
+                pet = pet,
+                petData = pData,
+                name = pType,
+                mutation = mutation,
+                level = level,
+                weight = weight,
+                isFavorite = isFavorite,
+                passive = passive
+            })
         end
-
-        -- Filter name (partial)
-        if filter.name and not string.find(string.lower(pType), string.lower(filter.name)) then
-            goto continue
-        end
-
-        -- Filter type (sama dengan exactName)
-        if filter.type and string.lower(pType) ~= string.lower(filter.type) then
-            goto continue
-        end
-
-        -- Filter mutation
-        if filter.mutation and string.lower(mutation) ~= string.lower(filter.mutation) then
-            goto continue
-        end
-
-        -- Filter isFavorite
-        if filter.isFavorite ~= nil and isFavorite ~= filter.isFavorite then
-            goto continue
-        end
-
-        -- Filter minLevel / maxLevel
-        if filter.minLevel and level < filter.minLevel then
-            goto continue
-        end
-        if filter.maxLevel and level > filter.maxLevel then
-            goto continue
-        end
-
-        -- Filter minWeight / maxWeight
-        if filter.minWeight and weight < filter.minWeight then
-            goto continue
-        end
-        if filter.maxWeight and weight > filter.maxWeight then
-            goto continue
-        end
-
-        -- Jika lolos semua filter, masukkan ke hasil
-        table.insert(results, {
-            uuid = uuid,
-            pet = pet,
-            petData = pData,
-            name = pType,
-            mutation = mutation,
-            level = level,
-            weight = weight,
-            isFavorite = isFavorite,
-            passive = passive,
-        })
-
-        ::continue::
     end
-
+    -- Sort by level descending (optional)
+    table.sort(results, function(a, b) return a.level > b.level end)
+    if filter.limit then
+        local limited = {}
+        for i = 1, math.min(filter.limit, #results) do
+            table.insert(limited, results[i])
+        end
+        return limited
+    end
     return results
 end
 
--- Cari satu pet (pertama yang cocok)
 function DataPetModule.findPet(filter)
     local results = DataPetModule.findPets(filter)
     return results[1]
 end
 
--- Cache cooldown
+-- Cooldown cache
 local cooldownCache = {}
 
--- Update cooldown dari event
-local function onCooldownUpdate(petId, dataArray)
-    if type(dataArray) == "table" and #dataArray > 0 then
-        local entry = dataArray[1]
-        if entry and entry.Time and entry.Passive then
-            cooldownCache[petId] = {
-                Time = entry.Time,
-                Passive = entry.Passive,
-                UpdatedAt = os.time()
-            }
-        end
-    end
-end
-
--- Dapatkan cooldown pet
 function DataPetModule.getCooldown(uuid)
     return cooldownCache[uuid]
 end
 
--- Setup listener cooldown (otomatis)
+-- Auto-update cooldown dari event
 local function setupCooldownListener()
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local GameEvents = ReplicatedStorage:FindFirstChild("GameEvents")
-    if GameEvents then
-        local event = GameEvents:FindFirstChild("PetCooldownsUpdated")
-        if event then
-            event.OnClientEvent:Connect(onCooldownUpdate)
+    if not GameEvents then return end
+    local PetCooldownsEvent = GameEvents:FindFirstChild("PetCooldownsUpdated")
+    if not PetCooldownsEvent then return end
+    PetCooldownsEvent.OnClientEvent:Connect(function(petId, dataArray)
+        if type(dataArray) == "table" and #dataArray > 0 then
+            cooldownCache[petId] = dataArray[1]
         end
-    end
+    end)
 end
-setupCooldownListener()
+task.spawn(setupCooldownListener)
 
 return DataPetModule
