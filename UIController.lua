@@ -17,10 +17,8 @@ return function(DataPetModule, SharkLogic)
         AutoSaveConfig = true
     })
 
-    -- Tab Utama
     local MainTab = Window:CreateTab("Kontrol")
 
-    -- State UI (akan di-update oleh Main.lua)
     local UIState = {
         selectedMimicUUID = nil,
         selectedSharkUUID = nil,
@@ -29,27 +27,26 @@ return function(DataPetModule, SharkLogic)
         isActive = false
     }
 
-    -- Callback untuk update state dari UI
     local callbacks = {}
 
-    -- Fungsi untuk mendaftarkan callback (dipanggil dari Main.lua)
     function UIState.onUpdate(callback)
         table.insert(callbacks, callback)
     end
 
-    -- Fungsi untuk memicu callback
     local function notifyUpdate()
         for _, cb in ipairs(callbacks) do
             pcall(cb, UIState)
         end
     end
 
-    -- 1. Dropdown/list untuk memilih Mimic
-    local MimicList = MainTab:CreateList({
+    -- 1. Dropdown untuk memilih Mimic (diganti dari CreateList -> CreateDropdown)
+    local MimicList = MainTab:CreateDropdown({
         Name = "Pilih Mimic (Mimic Octopus)",
         Options = {"Memuat data..."},
+        CurrentOption = {"Memuat data..."},
+        MultipleOptions = false, -- single select, sesuai logic aslinya
         Callback = function(option)
-            -- Cari UUID dari option yang dipilih
+            -- Rayfield CreateDropdown mengirim STRING kalau MultipleOptions = false
             local hasil = DataPetModule.findPets({ type = "Mimic Octopus" })
             for _, pet in ipairs(hasil) do
                 local text = string.format("%s %s %.2f KG Lv.%d",
@@ -63,12 +60,14 @@ return function(DataPetModule, SharkLogic)
         end
     })
 
-    -- 2. Dropdown/list untuk memilih Shark
-    local SharkList = MainTab:CreateList({
+    -- 2. Dropdown untuk memilih Shark (diganti dari CreateList -> CreateDropdown)
+    local SharkList = MainTab:CreateDropdown({
         Name = "Pilih Shark",
         Options = {"Memuat data..."},
+        CurrentOption = {"Memuat data..."},
+        MultipleOptions = false,
         Callback = function(option)
-            local hasil = DataPetModule.findPets({ name = "Shark" }) -- cari yang mengandung "Shark"
+            local hasil = DataPetModule.findPets({ name = "Shark" })
             for _, pet in ipairs(hasil) do
                 local text = string.format("%s %s %.2f KG Lv.%d",
                     pet.mutation, pet.name, pet.weight or 0, pet.level)
@@ -81,7 +80,6 @@ return function(DataPetModule, SharkLogic)
         end
     })
 
-    -- Fungsi refresh daftar Mimic
     local function refreshMimicList()
         local hasil = DataPetModule.findPets({ type = "Mimic Octopus" })
         local options = {}
@@ -93,10 +91,9 @@ return function(DataPetModule, SharkLogic)
         if #options == 0 then
             options = {"❌ Tidak ada Mimic Octopus"}
         end
-        MimicList:SetOptions(options)
+        MimicList:Refresh(options) -- Rayfield lama pakai :Refresh(), bukan :SetOptions()
     end
 
-    -- Fungsi refresh daftar Shark
     local function refreshSharkList()
         local hasil = DataPetModule.findPets({ name = "Shark" })
         local options = {}
@@ -108,10 +105,9 @@ return function(DataPetModule, SharkLogic)
         if #options == 0 then
             options = {"❌ Tidak ada Shark"}
         end
-        SharkList:SetOptions(options)
+        SharkList:Refresh(options)
     end
 
-    -- 3. Input Tumbal (bisa banyak, dipisah koma)
     local TumbalInput = MainTab:CreateInput({
         Name = "Tumbal (pisahkan dengan koma)",
         PlaceholderText = "Cat, Dog, Golden Lab",
@@ -131,7 +127,6 @@ return function(DataPetModule, SharkLogic)
         end
     })
 
-    -- 4. Input Target (satu nama)
     local TargetInput = MainTab:CreateInput({
         Name = "Target",
         PlaceholderText = "Moon Cat",
@@ -145,17 +140,14 @@ return function(DataPetModule, SharkLogic)
         end
     })
 
-    -- 5. Tombol Start/Stop
     local StartButton = MainTab:CreateButton({
         Name = "Start",
         Callback = function()
             if UIState.isActive then
-                -- Stop
                 UIState.isActive = false
-                StartButton:SetName("Start")
+                StartButton:Set("Start")
                 notifyUpdate()
             else
-                -- Start
                 if not UIState.selectedMimicUUID then
                     print("⚠️ Pilih Mimic dulu!")
                     return
@@ -165,13 +157,12 @@ return function(DataPetModule, SharkLogic)
                     return
                 end
                 UIState.isActive = true
-                StartButton:SetName("Stop")
+                StartButton:Set("Stop")
                 notifyUpdate()
             end
         end
     })
 
-    -- 6. Tombol Refresh daftar
     MainTab:CreateButton({
         Name = "Refresh Daftar Pet",
         Callback = function()
@@ -180,18 +171,14 @@ return function(DataPetModule, SharkLogic)
         end
     })
 
-    -- 7. Label status/log
     local StatusLabel = MainTab:CreateLabel("Status: Siap")
 
-    -- Fungsi update status (dipanggil dari Main.lua)
     function UIState.updateStatus(text)
         StatusLabel:Set(text)
     end
 
-    -- Inisialisasi daftar
     refreshMimicList()
     refreshSharkList()
 
-    -- Kembalikan UIState agar Main.lua bisa mengakses
     return UIState
 end
