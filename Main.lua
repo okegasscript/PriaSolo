@@ -286,7 +286,7 @@ local TargetDropdown = MainTab:CreateDropdown({
     Name = "Pilih Target (Non-Fav, Mutasi Normal)",
     Options = {"Memuat data..."},
     CurrentOption = "Memuat data...",
-    MultipleOptions = false,
+    MultipleOptions = true,
     Callback = function(option)
         local selectedLabel = option
         if type(option) == "table" then
