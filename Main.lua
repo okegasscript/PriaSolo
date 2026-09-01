@@ -108,6 +108,18 @@ NotificationEvent.OnClientEvent:Connect(function(message)
 end)
 
 -- ============================================================
+-- WEIGHT ESTIMATION (kalibrasi dari data Lion: BaseWeight 5.549 -> 284.92 KG @ Level 500)
+-- ============================================================
+
+local WEIGHT_GROWTH_RATE = 0.5599
+
+local function estimateWeight(baseWeight, level)
+    baseWeight = baseWeight or 0
+    level = level or 1
+    return baseWeight + (level - 1) * WEIGHT_GROWTH_RATE
+end
+
+-- ============================================================
 -- UI
 -- ============================================================
 
@@ -127,9 +139,11 @@ local Window = Rayfield:CreateWindow({
 
 local MainTab = Window:CreateTab("Auto Shark")
 
--- Helper: format label pet
+-- Helper: format label pet (pakai estimasi weight, BUKAN BaseWeight mentah)
 local function formatPetLabel(pet)
-    return string.format("%s %s %.2f KG Lv.%d", pet.mutation, pet.name, pet.weight or 0, pet.level)
+    local rawBaseWeight = (pet.petData and pet.petData.BaseWeight) or 0
+    local estimatedWeight = estimateWeight(rawBaseWeight, pet.level)
+    return string.format("%s %s %.2f KG Lv.%d", pet.mutation, pet.name, estimatedWeight, pet.level)
 end
 
 -- Helper: cari pet favorit berdasarkan keyword nama (partial match, case-insensitive)
@@ -251,7 +265,7 @@ MainTab:CreateInput({
     end
 })
 
--- 3. Toggle Start/Stop (ditaruh paling bawah, elemen terakhir di tab)
+-- 3. Toggle Start/Stop (elemen paling bawah)
 local StartToggle = MainTab:CreateToggle({
     Name = "▶️ Start / Stop",
     CurrentValue = false,
@@ -284,21 +298,6 @@ local StartToggle = MainTab:CreateToggle({
         end
     end
 })
--- Rate hasil kalibrasi dari data Lion (BaseWeight 5.549 -> 284.92 KG di Level 500)
-local WEIGHT_GROWTH_RATE = 0.5599
-
-local function estimateWeight(baseWeight, level)
-    baseWeight = baseWeight or 0
-    level = level or 1
-    return baseWeight + (level - 1) * WEIGHT_GROWTH_RATE
-end
-
--- Helper: format label pet (SUDAH DIUBAH pakai estimateWeight)
-local function formatPetLabel(pet)
-    local rawBaseWeight = pet.petData and pet.petData.BaseWeight or pet.weight or 0
-    local estimatedWeight = estimateWeight(rawBaseWeight, pet.level)
-    return string.format("%s %s %.2f KG Lv.%d", pet.mutation, pet.name, estimatedWeight, pet.level)
-end
 
 -- Load awal
 refreshMimicDropdown()
