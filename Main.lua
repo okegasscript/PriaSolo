@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Main Entry (FINAL)
+-- Pria Solo HUB - FINAL (Auto Shark + Auto Leveling + PNP Independen)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -8,7 +8,7 @@ local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 local CONFIG_FILE = "PriaSolo.json"
 
--- Load modul dari GitHub
+-- Load modul
 local DataPetModule = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua"))()
 local SharkLogic = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/SharkLogic.lua"))()
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
@@ -76,53 +76,28 @@ local state = {
     targetLevel = 100,
     currentLevelingTargetIndex = 1,
     currentLevelingTargetUUID = nil,
+    pnpActive = false,
+    pnpPets = {},
+    pnpPickupDelay = 0.6,
+    pnpPlaceDelay = 0,
+    pnpProcessing = {},
 }
 
 local isLevelingProcessing = false
 local isUnequipping = false
 
 -- ============================================================
--- FUNGSI UNEQUIP SELEKTIF (menggunakan EquippedPets dari root)
+-- EVENT SERVICE
 -- ============================================================
 
--- Fungsi untuk mendapatkan EquippedPets dari DataService secara langsung
-local function getEquippedPetsFromData()
-    local data = DataPetModule.getAllPets()
-    if not data then return nil end
-    -- Jika DataPetModule sudah menyediakan, pakai
-    if DataPetModule.getEquippedPets then
-        return DataPetModule.getEquippedPets()
-    end
-    -- Fallback: coba ambil dari DataService langsung
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local DataService = nil
-    local modules = ReplicatedStorage:FindFirstChild("Modules")
-    if modules then
-        DataService = modules:FindFirstChild("DataService")
-    end
-    if not DataService then
-        DataService = ReplicatedStorage:FindFirstChild("DataService")
-    end
-    if not DataService then
-        DataService = _G.DataService
-    end
-    if not DataService then
-        return nil
-    end
-    local success, ds = pcall(require, DataService)
-    if not success then return nil end
-    local dataFull = ds:GetData()
-    if dataFull then
-        -- Coba di root
-        if dataFull.EquippedPets and type(dataFull.EquippedPets) == "table" then
-            return dataFull.EquippedPets
-        end
-        if dataFull.PetsData and dataFull.PetsData.EquippedPets then
-            return dataFull.PetsData.EquippedPets
-        end
-    end
-    return nil
-end
+local GameEvents = ReplicatedStorage:WaitForChild("GameEvents")
+local PetCooldownsEvent = GameEvents:WaitForChild("PetCooldownsUpdated")
+local PetsService = GameEvents:WaitForChild("PetsService")
+local NotificationEvent = GameEvents:WaitForChild("Notification")
+
+-- ============================================================
+-- FUNGSI UNEQUIP SELEKTIF
+-- ============================================================
 
 local function unequipAllGardenPets(keepUUIDs, timeout)
     timeout = timeout or 1.0
@@ -135,13 +110,19 @@ local function unequipAllGardenPets(keepUUIDs, timeout)
         keepMap[uuid] = true
     end
 
-    local equipped = getEquippedPetsFromData()
-    if not equipped or #equipped == 0 then
+    local data = DataPetModule.getAllPets()
+    if not data then
+        isUnequipping = false
+        return
+    end
+    local equipped = data.PetsData and data.PetsData.EquippedPets
+    if not equipped or type(equipped) ~= "table" then
         isUnequipping = false
         return
     end
 
     equipped = uniqueTable(equipped)
+
     local toUnequip = {}
     for _, uuid in ipairs(equipped) do
         if not keepMap[uuid] then
@@ -166,15 +147,6 @@ local function unequipAllGardenPets(keepUUIDs, timeout)
 
     isUnequipping = false
 end
-
--- ============================================================
--- EVENT SERVICE
--- ============================================================
-
-local GameEvents = ReplicatedStorage:WaitForChild("GameEvents")
-local PetCooldownsEvent = GameEvents:WaitForChild("PetCooldownsUpdated")
-local PetsService = GameEvents:WaitForChild("PetsService")
-local NotificationEvent = GameEvents:WaitForChild("Notification")
 
 -- ============================================================
 -- FUNGSI LOGIKA AUTO SHARK
@@ -366,12 +338,57 @@ local function stopLeveling()
 end
 
 -- ============================================================
--- EVENT LISTENER (Cooldown untuk Auto Shark)
+-- FUNGSI LOGIKA PNP (INDEPENDEN)
+-- ============================================================
+
+local function pnpProcessPet(uuid)
+    if state.pnpProcessing[uuid] then return end
+    state.pnpProcessing[uuid] = true
+
+    local pickupDelay = state.pnpPickupDelay or 0.6
+    local placeDelay = state.pnpPlaceDelay or 0
+
+    -- Unequip setelah pickupDelay
+    task.wait(pickupDelay)
+    SharkLogic.unequipPet(PetsService, uuid)
+    print("📤 PNP unequip:", uuid)
+
+    -- Equip setelah placeDelay
+    task.wait(placeDelay)
+    SharkLogic.equipPet(PetsService, uuid, SharkLogic.defaultConfig.slotCFrame)
+    print("📥 PNP equip:", uuid)
+
+    state.pnpProcessing[uuid] = false
+end
+
+-- ============================================================
+-- EVENT LISTENER (Cooldown) - PNP Independen
 -- ============================================================
 
 local isHandlingCooldownEvent = false
 
 PetCooldownsEvent.OnClientEvent:Connect(function(petId, dataArray)
+    -- ===== PNP (INDEPENDEN) =====
+    -- Dijalankan tanpa peduli Auto Shark atau Auto Leveling
+    if state.pnpActive and petId and state.pnpPets and type(state.pnpPets) == "table" then
+        for _, uuid in ipairs(state.pnpPets) do
+            if petId == uuid then
+                local time = nil
+                for _, entry in ipairs(dataArray) do
+                    if entry.Time then time = entry.Time break end
+                end
+                if time == nil then return end
+                if time <= 0.1 and not state.pnpProcessing[uuid] then
+                    task.spawn(function()
+                        pnpProcessPet(uuid)
+                    end)
+                end
+                break
+            end
+        end
+    end
+
+    -- ===== Auto Shark (tetap sama, tidak berubah) =====
     if state.isSharkActive and petId == state.selectedMimicUUID and not isHandlingCooldownEvent then
         local time = nil
         for _, entry in ipairs(dataArray) do
@@ -421,6 +438,9 @@ local function saveConfig()
         levelingTim = state.levelingTim,
         levelingTargets = state.levelingTargets,
         targetLevel = state.targetLevel,
+        pnpPets = state.pnpPets,
+        pnpPickupDelay = state.pnpPickupDelay,
+        pnpPlaceDelay = state.pnpPlaceDelay,
         timestamp = os.time()
     }
     local json = HttpService:JSONEncode(config)
@@ -452,11 +472,57 @@ local function loadConfig()
         state.levelingTim = decoded.levelingTim or {}
         state.levelingTargets = decoded.levelingTargets or {}
         state.targetLevel = decoded.targetLevel or 100
+        state.pnpPets = decoded.pnpPets or {}
+        state.pnpPickupDelay = decoded.pnpPickupDelay or 0.6
+        state.pnpPlaceDelay = decoded.pnpPlaceDelay or 0
         print("✅ Konfigurasi dimuat dari " .. CONFIG_FILE)
         refreshAllUI()
     else
         warn("❌ Gagal memuat file.")
     end
+end
+
+local function resetAllSettings()
+    -- Matikan semua proses
+    if state.isSharkActive then
+        state.isSharkActive = false
+        unequipTargetAndEquipShark()
+        unequipAllGardenPets({}, 1.0)
+        if state.selectedMimicUUID then
+            SharkLogic.unequipPet(PetsService, state.selectedMimicUUID)
+        end
+        if state.selectedSharkUUID then
+            SharkLogic.unequipPet(PetsService, state.selectedSharkUUID)
+        end
+        if SharkToggle then SharkToggle:Set(false) end
+    end
+    if state.isLevelingActive then
+        stopLeveling()
+        if LevelingToggle then LevelingToggle:Set(false) end
+    end
+    if state.pnpActive then
+        state.pnpActive = false
+        for uuid, _ in pairs(state.pnpProcessing) do
+            state.pnpProcessing[uuid] = false
+        end
+        if PnpToggle then PnpToggle:Set(false) end
+    end
+
+    -- Reset state
+    state.selectedMimicUUID = nil
+    state.selectedSharkUUID = nil
+    state.targetQueue = {}
+    state.levelingTim = {}
+    state.levelingTargets = {}
+    state.pnpPets = {}
+    state.tumbalNames = {"Dog"}
+    state.minLevel = 100
+    state.targetLevel = 100
+    state.pnpPickupDelay = 0.6
+    state.pnpPlaceDelay = 0
+
+    refreshAllUI()
+    print("🔄 Semua pengaturan direset ke default.")
 end
 
 -- ============================================================
@@ -498,6 +564,7 @@ local function refreshAllUI()
     refreshTargetDropdown()
     refreshTimDropdown()
     refreshTargetLevelDropdown()
+    refreshPnpDropdown()
     updateStatusLabel()
     if TumbalInput then
         TumbalInput:Set(table.concat(state.tumbalNames, ", "))
@@ -510,10 +577,7 @@ local function refreshAllUI()
     end
 end
 
--- ============================================================
--- DROPDOWN MIMIC
--- ============================================================
-
+-- Dropdown Mimic
 local mimicLabelToUUID = {}
 local MimicDropdown
 local MimicFilterInput
@@ -549,7 +613,7 @@ end
 
 MimicFilterInput = SharkTab:CreateInput({
     Name = "🔍 Cari Mimic",
-    PlaceholderText = "Ketik untuk filter...",
+    PlaceholderText = "Filter...",
     CurrentValue = "",
     Callback = function(Value)
         refreshMimicDropdown(Value)
@@ -572,10 +636,7 @@ MimicDropdown = SharkTab:CreateDropdown({
     end
 })
 
--- ============================================================
--- DROPDOWN SHARK
--- ============================================================
-
+-- Dropdown Shark
 local sharkLabelToUUID = {}
 local SharkDropdown
 local SharkFilterInput
@@ -611,7 +672,7 @@ end
 
 SharkFilterInput = SharkTab:CreateInput({
     Name = "🔍 Cari Shark",
-    PlaceholderText = "Ketik untuk filter...",
+    PlaceholderText = "Filter...",
     CurrentValue = "",
     Callback = function(Value)
         refreshSharkDropdown(Value)
@@ -634,10 +695,7 @@ SharkDropdown = SharkTab:CreateDropdown({
     end
 })
 
--- ============================================================
--- DROPDOWN TARGET
--- ============================================================
-
+-- Dropdown Target
 local targetLabelToUUID = {}
 local TargetDropdown
 local TargetFilterInput
@@ -684,7 +742,7 @@ end
 
 TargetFilterInput = SharkTab:CreateInput({
     Name = "🔍 Cari Target",
-    PlaceholderText = "Ketik untuk filter...",
+    PlaceholderText = "Filter...",
     CurrentValue = "",
     Callback = function(Value)
         refreshTargetDropdown(Value)
@@ -708,10 +766,7 @@ TargetDropdown = SharkTab:CreateDropdown({
     end
 })
 
--- ============================================================
--- TUMBAL INPUT
--- ============================================================
-
+-- Tumbal
 local TumbalInput = SharkTab:CreateInput({
     Name = "Nama Tumbal (pisah koma)",
     PlaceholderText = "Contoh: Dog, Golden Lab, Black Bunny",
@@ -731,10 +786,7 @@ local TumbalInput = SharkTab:CreateInput({
     end
 })
 
--- ============================================================
--- SLIDER MIN LEVEL
--- ============================================================
-
+-- Min Level
 local MinLevelSlider = SharkTab:CreateSlider({
     Name = "Min Level Tumbal",
     Range = {0, 500},
@@ -747,10 +799,7 @@ local MinLevelSlider = SharkTab:CreateSlider({
     end
 })
 
--- ============================================================
--- REFRESH BUTTON
--- ============================================================
-
+-- Refresh
 SharkTab:CreateButton({
     Name = "🔄 Refresh Daftar Pet",
     Callback = function()
@@ -759,13 +808,11 @@ SharkTab:CreateButton({
         refreshTargetDropdown()
         refreshTimDropdown()
         refreshTargetLevelDropdown()
+        refreshPnpDropdown()
     end
 })
 
--- ============================================================
--- START/STOP SHARK
--- ============================================================
-
+-- Start/Stop Shark
 local SharkToggle
 SharkToggle = SharkTab:CreateToggle({
     Name = "▶️ Start / Stop Shark",
@@ -821,10 +868,7 @@ SharkToggle = SharkTab:CreateToggle({
 
 local LevelingTab = Window:CreateTab("Auto Leveling")
 
--- ============================================================
--- DROPDOWN TIM LEVELING
--- ============================================================
-
+-- Tim Leveling
 local timLabelToUUID = {}
 local TimDropdown
 local TimFilterInput
@@ -865,7 +909,7 @@ end
 
 TimFilterInput = LevelingTab:CreateInput({
     Name = "🔍 Cari Tim",
-    PlaceholderText = "Ketik untuk filter...",
+    PlaceholderText = "Filter...",
     CurrentValue = "",
     Callback = function(Value)
         refreshTimDropdown(Value)
@@ -896,10 +940,7 @@ TimDropdown = LevelingTab:CreateDropdown({
     end
 })
 
--- ============================================================
--- DROPDOWN TARGET LEVELING
--- ============================================================
-
+-- Target Leveling
 local targetLevelLabelToUUID = {}
 local TargetLevelDropdown
 local TargetLevelFilterInput
@@ -940,7 +981,7 @@ end
 
 TargetLevelFilterInput = LevelingTab:CreateInput({
     Name = "🔍 Cari Target Leveling",
-    PlaceholderText = "Ketik untuk filter...",
+    PlaceholderText = "Filter...",
     CurrentValue = "",
     Callback = function(Value)
         refreshTargetLevelDropdown(Value)
@@ -968,10 +1009,7 @@ TargetLevelDropdown = LevelingTab:CreateDropdown({
     end
 })
 
--- ============================================================
--- SLIDER TARGET LEVEL
--- ============================================================
-
+-- Target Level Slider
 local TargetLevelSlider = LevelingTab:CreateSlider({
     Name = "Target Level",
     Range = {0, 500},
@@ -989,10 +1027,7 @@ local TargetLevelSlider = LevelingTab:CreateSlider({
     end
 })
 
--- ============================================================
--- START/STOP LEVELING
--- ============================================================
-
+-- Start/Stop Leveling
 local LevelingToggle
 LevelingToggle = LevelingTab:CreateToggle({
     Name = "▶️ Start / Stop Leveling",
@@ -1023,60 +1058,158 @@ LevelingToggle = LevelingTab:CreateToggle({
 })
 
 -- ============================================================
--- TAB SAVE / LOAD
+-- TAB 3: PNP (INDEPENDEN)
 -- ============================================================
 
-local function saveLoadTab()
-    local tab = Window:CreateTab("Save / Load")
+local PnpTab = Window:CreateTab("PNP")
 
-    tab:CreateButton({
-        Name = "💾 Simpan Konfigurasi",
-        Callback = saveConfig
-    })
+local pnpLabelToUUID = {}
+local PnpDropdown
+local PnpFilterInput
 
-    tab:CreateButton({
-        Name = "📂 Muat Konfigurasi",
-        Callback = function()
-            loadConfig()
+local function refreshPnpDropdown(filterText)
+    filterText = filterText or (PnpFilterInput and PnpFilterInput:Get() or "")
+    local hasil = DataPetModule.findPets({ isFavorite = true })
+    local options = {}
+    pnpLabelToUUID = {}
+    for _, pet in ipairs(hasil) do
+        local label = formatPetLabel(pet)
+        if string.lower(label):find(string.lower(filterText)) then
+            if pnpLabelToUUID[label] then
+                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
+            end
+            table.insert(options, label)
+            pnpLabelToUUID[label] = pet.uuid
         end
-    })
-
-    tab:CreateButton({
-        Name = "🔄 Reset Semua (Hati-hati!)",
-        Callback = function()
-            if state.isSharkActive then
-                state.isSharkActive = false
-                unequipTargetAndEquipShark()
-                unequipAllGardenPets({}, 1.0)
-                if state.selectedMimicUUID then
-                    SharkLogic.unequipPet(PetsService, state.selectedMimicUUID)
-                end
-                if state.selectedSharkUUID then
-                    SharkLogic.unequipPet(PetsService, state.selectedSharkUUID)
+    end
+    table.sort(options, sortAlphabetically)
+    if #options == 0 then options = {"❌ Tidak ada pet favorit"} end
+    PnpDropdown:Refresh(options)
+    if #state.pnpPets > 0 then
+        local selectedLabels = {}
+        for _, uuid in ipairs(state.pnpPets) do
+            for label, u in pairs(pnpLabelToUUID) do
+                if u == uuid then
+                    table.insert(selectedLabels, label)
+                    break
                 end
             end
-            if state.isLevelingActive then
-                stopLeveling()
-            end
-            state.selectedMimicUUID = nil
-            state.selectedSharkUUID = nil
-            state.targetQueue = {}
-            state.levelingTim = {}
-            state.levelingTargets = {}
-            state.tumbalNames = {"Dog"}
-            state.minLevel = 100
-            state.targetLevel = 100
-            refreshAllUI()
-            print("🔄 Semua reset")
         end
-    })
+        if #selectedLabels > 0 then
+            PnpDropdown:SetSelectedOptions(selectedLabels)
+        end
+    end
 end
+
+PnpFilterInput = PnpTab:CreateInput({
+    Name = "🔍 Cari Pet",
+    PlaceholderText = "Filter...",
+    CurrentValue = "",
+    Callback = function(Value)
+        refreshPnpDropdown(Value)
+    end
+})
+
+PnpDropdown = PnpTab:CreateDropdown({
+    Name = "Pilih Pet untuk PNP",
+    Options = {"Memuat data..."},
+    CurrentOption = "Memuat data...",
+    MultipleOptions = true,
+    Callback = function(selectedLabels)
+        state.pnpPets = {}
+        for _, label in ipairs(selectedLabels) do
+            local uuid = pnpLabelToUUID[label]
+            if uuid then table.insert(state.pnpPets, uuid) end
+        end
+        print("✅ PNP Pets dipilih:", #state.pnpPets, "pet")
+    end
+})
+
+PnpTab:CreateInput({
+    Name = "Pickup Delay (detik)",
+    PlaceholderText = "0.6",
+    CurrentValue = tostring(state.pnpPickupDelay),
+    Callback = function(Value)
+        local num = tonumber(Value)
+        if num and num >= 0 then
+            state.pnpPickupDelay = num
+            print("📦 Pickup Delay:", num)
+        else
+            print("⚠️ Masukkan angka valid")
+        end
+    end
+})
+
+PnpTab:CreateInput({
+    Name = "Place Delay (detik)",
+    PlaceholderText = "0",
+    CurrentValue = tostring(state.pnpPlaceDelay),
+    Callback = function(Value)
+        local num = tonumber(Value)
+        if num and num >= 0 then
+            state.pnpPlaceDelay = num
+            print("📦 Place Delay:", num)
+        else
+            print("⚠️ Masukkan angka valid")
+        end
+    end
+})
+
+PnpTab:CreateButton({
+    Name = "🔄 Refresh Daftar Pet",
+    Callback = function()
+        refreshPnpDropdown()
+    end
+})
+
+local PnpToggle
+PnpToggle = PnpTab:CreateToggle({
+    Name = "▶️ Start / Stop PNP",
+    CurrentValue = false,
+    Callback = function(Value)
+        if Value then
+            if #state.pnpPets == 0 then
+                print("⚠️ Pilih pet dulu!")
+                if PnpToggle then PnpToggle:Set(false) end
+                return
+            end
+            state.pnpActive = true
+            print("▶️ PNP dimulai untuk", #state.pnpPets, "pet")
+        else
+            state.pnpActive = false
+            for uuid, _ in pairs(state.pnpProcessing) do
+                state.pnpProcessing[uuid] = false
+            end
+            print("⏹️ PNP dihentikan")
+        end
+    end
+})
+
+-- ============================================================
+-- TAB 4: PENGATURAN
+-- ============================================================
+
+local SettingsTab = Window:CreateTab("Pengaturan")
+
+SettingsTab:CreateButton({
+    Name = "💾 Simpan Konfigurasi",
+    Callback = saveConfig
+})
+
+SettingsTab:CreateButton({
+    Name = "📂 Muat Konfigurasi",
+    Callback = loadConfig
+})
+
+SettingsTab:CreateButton({
+    Name = "🔄 Reset Semua",
+    Callback = resetAllSettings
+})
 
 -- ============================================================
 -- INISIALISASI
 -- ============================================================
 
 refreshAllUI()
-saveLoadTab()
 
 print("✅ Pria Solo HUB siap. Tekan K untuk membuka UI.")
