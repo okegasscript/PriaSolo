@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield 2 (Gen2)
+-- Pria Solo HUB - Rayfield 1 (dengan custom save/load)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -11,7 +11,7 @@ local CONFIG_FILE = "PriaSolo.json"
 -- Load modul
 local DataPetModule = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua"))()
 local SharkLogic = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/SharkLogic.lua"))()
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2"))()
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 
 if not DataPetModule or not SharkLogic or not Rayfield then
     warn("❌ Gagal memuat modul")
@@ -96,7 +96,7 @@ local PetsService = GameEvents:WaitForChild("PetsService")
 local NotificationEvent = GameEvents:WaitForChild("Notification")
 
 -- ============================================================
--- FUNGSI UNEQUIP SELEKTIF (sama seperti sebelumnya)
+-- FUNGSI UNEQUIP SELEKTIF
 -- ============================================================
 
 local function unequipAllGardenPets(keepUUIDs, timeout)
@@ -149,7 +149,7 @@ local function unequipAllGardenPets(keepUUIDs, timeout)
 end
 
 -- ============================================================
--- FUNGSI LOGIKA AUTO SHARK (sama seperti sebelumnya)
+-- FUNGSI LOGIKA AUTO SHARK
 -- ============================================================
 
 local function unequipTargetAndEquipShark()
@@ -219,7 +219,7 @@ local function unequipSharkAndEquipTumbalTarget()
 end
 
 -- ============================================================
--- FUNGSI LOGIKA AUTO LEVELING (sama seperti sebelumnya)
+-- FUNGSI LOGIKA AUTO LEVELING
 -- ============================================================
 
 local function getPetLevel(uuid)
@@ -338,7 +338,7 @@ local function stopLeveling()
 end
 
 -- ============================================================
--- FUNGSI LOGIKA PNP (tanpa print, CFrame default)
+-- FUNGSI LOGIKA PNP (tanpa print)
 -- ============================================================
 
 local function pnpProcessPet(uuid)
@@ -420,7 +420,7 @@ NotificationEvent.OnClientEvent:Connect(function(message)
 end)
 
 -- ============================================================
--- SAVE / LOAD (untuk konfigurasi internal, bukan Rayfield)
+-- SAVE / LOAD (custom)
 -- ============================================================
 
 local function saveConfig()
@@ -519,10 +519,10 @@ local function resetAllSettings()
 end
 
 -- ============================================================
--- DEKLARASI VARIABEL UI
+-- DEKLARASI VARIABEL UI (Rayfield 1)
 -- ============================================================
 
-local window
+local Window
 local StatusLabel
 local TumbalInput, MinLevelSlider, TargetLevelSlider
 local SharkToggle, LevelingToggle, PnpToggle
@@ -531,7 +531,7 @@ local TimDropdown, TargetLevelDropdown
 local PnpDropdown
 
 -- ============================================================
--- FUNGSI REFRESH
+-- FUNGSI REFRESH (Rayfield 1)
 -- ============================================================
 
 local function updateStatusLabel()
@@ -776,56 +776,57 @@ local function refreshAllUI()
     refreshPnpDropdown()
     updateStatusLabel()
     if TumbalInput then
-        TumbalInput:SetCurrentValue(table.concat(state.tumbalNames, ", "))
+        TumbalInput:Set(table.concat(state.tumbalNames, ", "))
     end
     if MinLevelSlider then
-        MinLevelSlider:SetCurrentValue(state.minLevel)
+        MinLevelSlider:Set(state.minLevel)
     end
     if TargetLevelSlider then
-        TargetLevelSlider:SetCurrentValue(state.targetLevel)
+        TargetLevelSlider:Set(state.targetLevel)
     end
 end
 
 -- ============================================================
--- UI (Rayfield 2)
+-- UI (Rayfield 1)
 -- ============================================================
 
-window = Rayfield:CreateWindow({
-    name = "Pria Solo HUB",
-    configuration = {
-        autoSave = true,
-        autoLoad = true,
-        fileName = "Settings",
-        customFolder = "PriaSolo",
+Window = Rayfield:CreateWindow({
+    Name = "Pria Solo HUB",
+    LoadingTitle = "Memuat...",
+    LoadingSubtitle = "by PriaSolo",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "PriaSolo",
+        FileName = "Settings"
     },
-    key = Enum.KeyCode.K,
+    Key = Enum.KeyCode.K,
+    AutoLoadConfig = true,
+    AutoSaveConfig = true
 })
 
 -- ============================================================
 -- TAB 1: AUTO SHARK
 -- ============================================================
 
-local sharkTab = window:CreateTab({ name = "Auto Shark" })
+local SharkTab = Window:CreateTab("Auto Shark", nil)
 
-StatusLabel = sharkTab:CreateLabel({
-    name = "Mimic: (belum) | Shark: (belum) | Target: 0 terpilih"
-})
+StatusLabel = SharkTab:CreateLabel("Mimic: (belum) | Shark: (belum) | Target: 0 terpilih")
 
-sharkTab:CreateInput({
-    name = "🔍 Cari Mimic",
-    placeholder = "Filter...",
-    currentValue = "",
-    callback = function(Value)
+SharkTab:CreateInput({
+    Name = "🔍 Cari Mimic",
+    PlaceholderText = "Filter...",
+    CurrentValue = "",
+    Callback = function(Value)
         refreshMimicDropdown(Value)
     end
 })
 
-MimicDropdown = sharkTab:CreateDropdown({
-    name = "Pilih Mimic",
-    options = {"Memuat data..."},
-    currentOption = "Memuat data...",
-    multiple = false,
-    callback = function(option)
+MimicDropdown = SharkTab:CreateDropdown({
+    Name = "Pilih Mimic",
+    Options = {"Memuat data..."},
+    CurrentOption = "Memuat data...",
+    MultipleOptions = false,
+    Callback = function(option)
         local selectedLabel = (type(option) == "table") and option[1] or option
         local map = _G._mimicMap or {}
         local uuid = map[selectedLabel]
@@ -837,21 +838,21 @@ MimicDropdown = sharkTab:CreateDropdown({
     end
 })
 
-sharkTab:CreateInput({
-    name = "🔍 Cari Shark",
-    placeholder = "Filter...",
-    currentValue = "",
-    callback = function(Value)
+SharkTab:CreateInput({
+    Name = "🔍 Cari Shark",
+    PlaceholderText = "Filter...",
+    CurrentValue = "",
+    Callback = function(Value)
         refreshSharkDropdown(Value)
     end
 })
 
-SharkDropdown = sharkTab:CreateDropdown({
-    name = "Pilih Shark",
-    options = {"Memuat data..."},
-    currentOption = "Memuat data...",
-    multiple = false,
-    callback = function(option)
+SharkDropdown = SharkTab:CreateDropdown({
+    Name = "Pilih Shark",
+    Options = {"Memuat data..."},
+    CurrentOption = "Memuat data...",
+    MultipleOptions = false,
+    Callback = function(option)
         local selectedLabel = (type(option) == "table") and option[1] or option
         local map = _G._sharkMap or {}
         local uuid = map[selectedLabel]
@@ -863,21 +864,21 @@ SharkDropdown = sharkTab:CreateDropdown({
     end
 })
 
-sharkTab:CreateInput({
-    name = "🔍 Cari Target",
-    placeholder = "Filter...",
-    currentValue = "",
-    callback = function(Value)
+SharkTab:CreateInput({
+    Name = "🔍 Cari Target",
+    PlaceholderText = "Filter...",
+    CurrentValue = "",
+    Callback = function(Value)
         refreshTargetDropdown(Value)
     end
 })
 
-TargetDropdown = sharkTab:CreateDropdown({
-    name = "Pilih Target (Multiple, Non-Fav, Normal)",
-    options = {"Memuat data..."},
-    currentOption = "Memuat data...",
-    multiple = true,
-    callback = function(selectedLabels)
+TargetDropdown = SharkTab:CreateDropdown({
+    Name = "Pilih Target (Multiple, Non-Fav, Normal)",
+    Options = {"Memuat data..."},
+    CurrentOption = "Memuat data...",
+    MultipleOptions = true,
+    Callback = function(selectedLabels)
         local map = _G._targetMap or {}
         state.targetQueue = {}
         for _, label in ipairs(selectedLabels) do
@@ -890,11 +891,11 @@ TargetDropdown = sharkTab:CreateDropdown({
     end
 })
 
-TumbalInput = sharkTab:CreateInput({
-    name = "Nama Tumbal (pisah koma)",
-    placeholder = "Contoh: Dog, Golden Lab, Black Bunny",
-    currentValue = table.concat(state.tumbalNames, ", "),
-    callback = function(Value)
+TumbalInput = SharkTab:CreateInput({
+    Name = "Nama Tumbal (pisah koma)",
+    PlaceholderText = "Contoh: Dog, Golden Lab, Black Bunny",
+    CurrentValue = table.concat(state.tumbalNames, ", "),
+    Callback = function(Value)
         if Value and Value ~= "" then
             local names = {}
             for token in string.gmatch(Value, "[^,]+") do
@@ -909,22 +910,21 @@ TumbalInput = sharkTab:CreateInput({
     end
 })
 
-MinLevelSlider = sharkTab:CreateSlider({
-    name = "Min Level Tumbal",
-    min = 0,
-    max = 500,
-    increment = 1,
-    suffix = "Level",
-    currentValue = state.minLevel,
-    callback = function(value)
+MinLevelSlider = SharkTab:CreateSlider({
+    Name = "Min Level Tumbal",
+    Range = {0, 500},
+    Increment = 1,
+    Suffix = "Level",
+    CurrentValue = state.minLevel,
+    Callback = function(value)
         state.minLevel = value
         print("📊 Min Level Tumbal:", value)
     end
 })
 
-sharkTab:CreateButton({
-    name = "🔄 Refresh Daftar Pet",
-    callback = function()
+SharkTab:CreateButton({
+    Name = "🔄 Refresh Daftar Pet",
+    Callback = function()
         refreshMimicDropdown()
         refreshSharkDropdown()
         refreshTargetDropdown()
@@ -934,10 +934,10 @@ sharkTab:CreateButton({
     end
 })
 
-SharkToggle = sharkTab:CreateToggle({
-    name = "▶️ Start / Stop Shark",
-    value = false,
-    callback = function(Value)
+SharkToggle = SharkTab:CreateToggle({
+    Name = "▶️ Start / Stop Shark",
+    CurrentValue = false,
+    Callback = function(Value)
         if Value then
             if state.isLevelingActive then
                 print("⚠️ Auto Leveling sedang aktif! Matikan dulu.")
@@ -986,23 +986,23 @@ SharkToggle = sharkTab:CreateToggle({
 -- TAB 2: AUTO LEVELING
 -- ============================================================
 
-local levelingTab = window:CreateTab({ name = "Auto Leveling" })
+local LevelingTab = Window:CreateTab("Auto Leveling", nil)
 
-levelingTab:CreateInput({
-    name = "🔍 Cari Tim",
-    placeholder = "Filter...",
-    currentValue = "",
-    callback = function(Value)
+LevelingTab:CreateInput({
+    Name = "🔍 Cari Tim",
+    PlaceholderText = "Filter...",
+    CurrentValue = "",
+    Callback = function(Value)
         refreshTimDropdown(Value)
     end
 })
 
-TimDropdown = levelingTab:CreateDropdown({
-    name = "Tim Leveling (Max 7, Favorit)",
-    options = {"Memuat data..."},
-    currentOption = "Memuat data...",
-    multiple = true,
-    callback = function(selectedLabels)
+TimDropdown = LevelingTab:CreateDropdown({
+    Name = "Tim Leveling (Max 7, Favorit)",
+    Options = {"Memuat data..."},
+    CurrentOption = "Memuat data...",
+    MultipleOptions = true,
+    Callback = function(selectedLabels)
         local map = _G._timMap or {}
         state.levelingTim = {}
         for _, label in ipairs(selectedLabels) do
@@ -1022,21 +1022,21 @@ TimDropdown = levelingTab:CreateDropdown({
     end
 })
 
-levelingTab:CreateInput({
-    name = "🔍 Cari Target Leveling",
-    placeholder = "Filter...",
-    currentValue = "",
-    callback = function(Value)
+LevelingTab:CreateInput({
+    Name = "🔍 Cari Target Leveling",
+    PlaceholderText = "Filter...",
+    CurrentValue = "",
+    Callback = function(Value)
         refreshTargetLevelDropdown(Value)
     end
 })
 
-TargetLevelDropdown = levelingTab:CreateDropdown({
-    name = "Target Leveling (Non-Favorit)",
-    options = {"Memuat data..."},
-    currentOption = "Memuat data...",
-    multiple = true,
-    callback = function(selectedLabels)
+TargetLevelDropdown = LevelingTab:CreateDropdown({
+    Name = "Target Leveling (Non-Favorit)",
+    Options = {"Memuat data..."},
+    CurrentOption = "Memuat data...",
+    MultipleOptions = true,
+    Callback = function(selectedLabels)
         local map = _G._targetLevelMap or {}
         state.levelingTargets = {}
         for _, label in ipairs(selectedLabels) do
@@ -1053,14 +1053,13 @@ TargetLevelDropdown = levelingTab:CreateDropdown({
     end
 })
 
-TargetLevelSlider = levelingTab:CreateSlider({
-    name = "Target Level",
-    min = 0,
-    max = 500,
-    increment = 1,
-    suffix = "Level",
-    currentValue = state.targetLevel,
-    callback = function(value)
+TargetLevelSlider = LevelingTab:CreateSlider({
+    Name = "Target Level",
+    Range = {0, 500},
+    Increment = 1,
+    Suffix = "Level",
+    CurrentValue = state.targetLevel,
+    Callback = function(value)
         state.targetLevel = value
         print("🎯 Target Level:", value)
         if state.isLevelingActive and not isLevelingProcessing then
@@ -1071,10 +1070,10 @@ TargetLevelSlider = levelingTab:CreateSlider({
     end
 })
 
-LevelingToggle = levelingTab:CreateToggle({
-    name = "▶️ Start / Stop Leveling",
-    value = false,
-    callback = function(Value)
+LevelingToggle = LevelingTab:CreateToggle({
+    Name = "▶️ Start / Stop Leveling",
+    CurrentValue = false,
+    Callback = function(Value)
         if Value then
             if state.isSharkActive then
                 print("⚠️ Auto Shark sedang aktif! Matikan dulu.")
@@ -1103,23 +1102,23 @@ LevelingToggle = levelingTab:CreateToggle({
 -- TAB 3: PNP
 -- ============================================================
 
-local pnpTab = window:CreateTab({ name = "PNP" })
+local PnpTab = Window:CreateTab("PNP", nil)
 
-pnpTab:CreateInput({
-    name = "🔍 Cari Pet",
-    placeholder = "Filter...",
-    currentValue = "",
-    callback = function(Value)
+PnpTab:CreateInput({
+    Name = "🔍 Cari Pet",
+    PlaceholderText = "Filter...",
+    CurrentValue = "",
+    Callback = function(Value)
         refreshPnpDropdown(Value)
     end
 })
 
-PnpDropdown = pnpTab:CreateDropdown({
-    name = "Pilih Pet untuk PNP",
-    options = {"Memuat data..."},
-    currentOption = "Memuat data...",
-    multiple = true,
-    callback = function(selectedLabels)
+PnpDropdown = PnpTab:CreateDropdown({
+    Name = "Pilih Pet untuk PNP",
+    Options = {"Memuat data..."},
+    CurrentOption = "Memuat data...",
+    MultipleOptions = true,
+    Callback = function(selectedLabels)
         local map = _G._pnpMap or {}
         state.pnpPets = {}
         for _, label in ipairs(selectedLabels) do
@@ -1130,11 +1129,11 @@ PnpDropdown = pnpTab:CreateDropdown({
     end
 })
 
-pnpTab:CreateInput({
-    name = "Pickup Delay (detik)",
-    placeholder = "0.6",
-    currentValue = tostring(state.pnpPickupDelay),
-    callback = function(Value)
+PnpTab:CreateInput({
+    Name = "Pickup Delay (detik)",
+    PlaceholderText = "0.6",
+    CurrentValue = tostring(state.pnpPickupDelay),
+    Callback = function(Value)
         local num = tonumber(Value)
         if num and num >= 0 then
             state.pnpPickupDelay = num
@@ -1145,11 +1144,11 @@ pnpTab:CreateInput({
     end
 })
 
-pnpTab:CreateInput({
-    name = "Place Delay (detik)",
-    placeholder = "0",
-    currentValue = tostring(state.pnpPlaceDelay),
-    callback = function(Value)
+PnpTab:CreateInput({
+    Name = "Place Delay (detik)",
+    PlaceholderText = "0",
+    CurrentValue = tostring(state.pnpPlaceDelay),
+    Callback = function(Value)
         local num = tonumber(Value)
         if num and num >= 0 then
             state.pnpPlaceDelay = num
@@ -1160,17 +1159,17 @@ pnpTab:CreateInput({
     end
 })
 
-pnpTab:CreateButton({
-    name = "🔄 Refresh Daftar Pet",
-    callback = function()
+PnpTab:CreateButton({
+    Name = "🔄 Refresh Daftar Pet",
+    Callback = function()
         refreshPnpDropdown()
     end
 })
 
-PnpToggle = pnpTab:CreateToggle({
-    name = "▶️ Start / Stop PNP",
-    value = false,
-    callback = function(Value)
+PnpToggle = PnpTab:CreateToggle({
+    Name = "▶️ Start / Stop PNP",
+    CurrentValue = false,
+    Callback = function(Value)
         if Value then
             if #state.pnpPets == 0 then
                 print("⚠️ Pilih pet dulu!")
@@ -1190,24 +1189,24 @@ PnpToggle = pnpTab:CreateToggle({
 })
 
 -- ============================================================
--- TAB 4: PENGATURAN
+-- TAB 4: PENGATURAN (dengan tombol save/load custom)
 -- ============================================================
 
-local settingsTab = window:CreateTab({ name = "Pengaturan" })
+local SettingsTab = Window:CreateTab("Pengaturan", nil)
 
-settingsTab:CreateButton({
-    name = "💾 Simpan Konfigurasi",
-    callback = saveConfig
+SettingsTab:CreateButton({
+    Name = "💾 Simpan Konfigurasi",
+    Callback = saveConfig
 })
 
-settingsTab:CreateButton({
-    name = "📂 Muat Konfigurasi",
-    callback = loadConfig
+SettingsTab:CreateButton({
+    Name = "📂 Muat Konfigurasi",
+    Callback = loadConfig
 })
 
-settingsTab:CreateButton({
-    name = "🔄 Reset Semua",
-    callback = resetAllSettings
+SettingsTab:CreateButton({
+    Name = "🔄 Reset Semua",
+    Callback = resetAllSettings
 })
 
 -- ============================================================
@@ -1216,4 +1215,4 @@ settingsTab:CreateButton({
 
 refreshAllUI()
 
-print("✅ Pria Solo HUB siap (Rayfield 2). Tekan K untuk membuka UI.")
+print("✅ Pria Solo HUB siap (Rayfield 1 dengan custom save/load). Tekan K untuk membuka UI.")
