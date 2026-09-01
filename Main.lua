@@ -440,4 +440,322 @@ refreshSharkDropdown()
 refreshTargetDropdown()
 updateStatusLabel()
 
+
+
+-- ============================================================
+-- Auto Leveling - Tab UI & Logic
+-- ============================================================
+
+-- Asumsi DataPetModule, SharkLogic, Rayfield, PetsService sudah tersedia
+-- (dari Main.lua)
+
+-- Buat tab baru
+local LevelingTab = Window:CreateTab("Auto Leveling")
+
+-- ============================================================
+-- STATE LEVELING
+-- ============================================================
+
+local levelState = {
+    isActive = false,
+    isProcessing = false,
+    teamQueue = {},          -- daftar UUID tim (max 7)
+    targetQueue = {},        -- daftar UUID target (multiple)
+    currentTargetIndex = 1,
+    targetLevel = 100,
+    currentTargetUUID = nil,
+    currentTeamUUIDs = {},   -- UUID tim yang sedang di-equip
+    cycleCount = 0,
+    lastActionTime = 0
+}
+
+-- ============================================================
+-- FUNGSI UTILITY
+-- ============================================================
+
+local function formatPetLabel(pet)
+    return string.format("%s %s %.2f KG Lv.%d", pet.mutation, pet.name, pet.weight or 0, pet.level)
+end
+
+-- ============================================================
+-- DROPDOWN TIM LEVELING (Multiple, Max 7, IsFavorite=true)
+-- ============================================================
+
+local teamLabelToUUID = {}
+local TeamDropdown = LevelingTab:CreateDropdown({
+    Name = "Tim Leveling (Max 7, Favorit)",
+    Options = {"Memuat data..."},
+    CurrentOption = "Memuat data...",
+    MultipleOptions = true,
+    Max = 7,  -- batas maksimal 7
+    Callback = function(selectedLabels)
+        levelState.teamQueue = {}
+        for _, label in ipairs(selectedLabels) do
+            local uuid = teamLabelToUUID[label]
+            if uuid then
+                table.insert(levelState.teamQueue, uuid)
+            end
+        end
+        print("✅ Tim Leveling dipilih:", #levelState.teamQueue, "pet")
+    end
+})
+
+local function refreshTeamDropdown()
+    local hasil = DataPetModule.findPets({
+        isFavorite = true
+    })
+    local options = {}
+    teamLabelToUUID = {}
+    for _, pet in ipairs(hasil) do
+        local label = formatPetLabel(pet)
+        if teamLabelToUUID[label] then
+            label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
+        end
+        table.insert(options, label)
+        teamLabelToUUID[label] = pet.uuid
+    end
+    if #options == 0 then options = {"❌ Tidak ada pet favorit"} end
+    TeamDropdown:Refresh(options)
+end
+
+-- ============================================================
+-- DROPDOWN TARGET LEVELING (Multiple, IsFavorite=false)
+-- ============================================================
+
+local targetLevelLabelToUUID = {}
+local TargetLevelDropdown = LevelingTab:CreateDropdown({
+    Name = "Target Leveling (Non-Favorit)",
+    Options = {"Memuat data..."},
+    CurrentOption = "Memuat data...",
+    MultipleOptions = true,
+    Callback = function(selectedLabels)
+        levelState.targetQueue = {}
+        for _, label in ipairs(selectedLabels) do
+            local uuid = targetLevelLabelToUUID[label]
+            if uuid then
+                table.insert(levelState.targetQueue, uuid)
+            end
+        end
+        levelState.currentTargetIndex = 1
+        print("✅ Target Leveling dipilih:", #levelState.targetQueue, "pet")
+    end
+})
+
+local function refreshTargetLevelDropdown()
+    local hasil = DataPetModule.findPets({
+        isFavorite = false
+    })
+    local options = {}
+    targetLevelLabelToUUID = {}
+    for _, pet in ipairs(hasil) do
+        local label = formatPetLabel(pet)
+        if targetLevelLabelToUUID[label] then
+            label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
+        end
+        table.insert(options, label)
+        targetLevelLabelToUUID[label] = pet.uuid
+    end
+    if #options == 0 then options = {"❌ Tidak ada pet non-favorit"} end
+    TargetLevelDropdown:Refresh(options)
+end
+
+-- ============================================================
+-- SLIDER TARGET LEVEL
+-- ============================================================
+
+LevelingTab:CreateSlider({
+    Name = "Target Level",
+    Range = {0, 500},
+    Increment = 1,
+    Suffix = "Level",
+    CurrentValue = levelState.targetLevel,
+    Callback = function(value)
+        levelState.targetLevel = value
+        print("🎯 Target Level:", value)
+    end
+})
+
+-- ============================================================
+-- BUTTON REFRESH
+-- ============================================================
+
+LevelingTab:CreateButton({
+    Name = "🔄 Refresh Daftar Pet",
+    Callback = function()
+        refreshTeamDropdown()
+        refreshTargetLevelDropdown()
+    end
+})
+
+-- ============================================================
+-- FUNGSI LOGIKA LEVELING
+-- ============================================================
+
+-- Unequip semua pet yang ada di garden (EquippedPets)
+local function unequipAllGarden()
+    local equipped = DataPetModule.getEquippedPets()
+    for _, uuid in ipairs(equipped) do
+        SharkLogic.unequipPet(PetsService, uuid)
+    end
+    task.wait(0.5) -- tunggu proses
+end
+
+-- Equip tim leveling (max 7)
+local function equipTeam()
+    local count = 0
+    for _, uuid in ipairs(levelState.teamQueue) do
+        if count >= 7 then break end
+        SharkLogic.equipPet(PetsService, uuid, SharkLogic.defaultConfig.slotCFrame)
+        levelState.currentTeamUUIDs[count+1] = uuid
+        count = count + 1
+    end
+    print("✅ Tim Leveling di-equip:", count, "pet")
+end
+
+-- Ambil target berikutnya (loop)
+local function getNextLevelTarget()
+    if #levelState.targetQueue == 0 then
+        print("⚠️ Tidak ada target leveling")
+        return nil
+    end
+    local target = levelState.targetQueue[levelState.currentTargetIndex]
+    levelState.currentTargetIndex = levelState.currentTargetIndex + 1
+    if levelState.currentTargetIndex > #levelState.targetQueue then
+        levelState.currentTargetIndex = 1
+    end
+    return target
+end
+
+-- Proses leveling satu target
+local function processLevelTarget(targetUUID)
+    if not targetUUID then
+        print("⚠️ Target UUID nil")
+        return false
+    end
+
+    -- Ambil data target
+    local targetData = DataPetModule.getPetData(targetUUID)
+    if not targetData then
+        print("⚠️ Target tidak ditemukan di inventory")
+        return false
+    end
+
+    local currentLevel = targetData.PetData and (targetData.PetData.Level or targetData.PetData.Lvl or 0) or 0
+    if currentLevel >= levelState.targetLevel then
+        print("✅ Target sudah mencapai target level, lewati")
+        return true  -- dianggap selesai
+    end
+
+    -- Equip target ke garden (untuk dinaikkan levelnya)
+    SharkLogic.equipPet(PetsService, targetUUID, SharkLogic.defaultConfig.slotCFrame)
+    levelState.currentTargetUUID = targetUUID
+    print("🔄 Equip target untuk leveling:", targetUUID, "Level saat ini:", currentLevel)
+
+    -- Tunggu sampai target mencapai level target (atau kondisi berhenti)
+    -- Karena leveling terjadi otomatis oleh game, kita polling level
+    local startTime = os.clock()
+    while levelState.isActive and levelState.currentTargetUUID == targetUUID do
+        local data = DataPetModule.getPetData(targetUUID)
+        if data then
+            local lvl = data.PetData and (data.PetData.Level or data.PetData.Lvl or 0) or 0
+            if lvl >= levelState.targetLevel then
+                print("✅ Target mencapai level target! Level:", lvl)
+                SharkLogic.unequipPet(PetsService, targetUUID)
+                levelState.currentTargetUUID = nil
+                return true
+            end
+        end
+        -- Cek timeout 10 detik (jika tidak naik, lewati)
+        if os.clock() - startTime > 10 then
+            print("⚠️ Timeout leveling, lewati target")
+            SharkLogic.unequipPet(PetsService, targetUUID)
+            levelState.currentTargetUUID = nil
+            return false
+        end
+        task.wait(0.5)
+    end
+    return false
+end
+
+-- ============================================================
+-- START / STOP TOGGLE LEVELING
+-- ============================================================
+
+local LevelToggle
+LevelToggle = LevelingTab:CreateToggle({
+    Name = "▶️ Start / Stop Leveling",
+    CurrentValue = false,
+    Callback = function(Value)
+        if Value then
+            if #levelState.teamQueue == 0 then
+                print("⚠️ Pilih Tim Leveling dulu!")
+                if LevelToggle then LevelToggle:Set(false) end
+                return
+            end
+            if #levelState.targetQueue == 0 then
+                print("⚠️ Pilih Target Leveling dulu!")
+                if LevelToggle then LevelToggle:Set(false) end
+                return
+            end
+
+            levelState.isActive = true
+            levelState.isProcessing = false
+            levelState.currentTargetIndex = 1
+            levelState.currentTargetUUID = nil
+            levelState.currentTeamUUIDs = {}
+
+            print("▶️ Auto Leveling dimulai")
+
+            -- 1. Bersihkan garden
+            unequipAllGarden()
+
+            -- 2. Equip Tim Leveling
+            equipTeam()
+
+            -- 3. Proses target satu per satu
+            task.spawn(function()
+                while levelState.isActive do
+                    local targetUUID = getNextLevelTarget()
+                    if not targetUUID then
+                        print("⚠️ Tidak ada target tersisa")
+                        break
+                    end
+
+                    -- Proses target
+                    local done = processLevelTarget(targetUUID)
+                    if not done then
+                        print("❌ Gagal memproses target, lanjut ke berikutnya")
+                    end
+
+                    -- Hapus target dari queue jika sudah selesai (opsional)
+                    -- tapi karena kita loop, kita bisa lanjutkan
+                    task.wait(0.5)
+                end
+                -- Jika selesai semua target, stop otomatis
+                if levelState.isActive then
+                    print("✅ Semua target selesai, Auto Leveling berhenti")
+                    if LevelToggle then LevelToggle:Set(false) end
+                    levelState.isActive = false
+                end
+            end)
+        else
+            levelState.isActive = false
+            print("⏹️ Auto Leveling dihentikan")
+            -- Unequip semua target & tim
+            unequipAllGarden()
+            levelState.currentTargetUUID = nil
+            levelState.currentTeamUUIDs = {}
+        end
+    end
+})
+
+-- ============================================================
+-- INISIALISASI LEVELING
+-- ============================================================
+
+refreshTeamDropdown()
+refreshTargetLevelDropdown()
+
+print("✅ Tab Auto Leveling siap.")
+
 print("✅ Auto Shark siap (Target: Semua Non-Fav Normal). Tekan K untuk membuka UI.")
