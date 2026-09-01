@@ -1,244 +1,31 @@
 -- ============================================================
--- Auto Shark - Main Entry (FINAL dengan fallback)
+-- PriaSolo - Main Entry (FINAL)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
 
--- ============================================================
--- FUNGSI UNTUK MENDAPATKAN DATA PET (FALLBACK)
--- ============================================================
-
-local function getFallbackDataPetModule()
-    -- Coba ambil DataService langsung
-    local DataService = nil
-    local success, ds = pcall(function()
-        return require(ReplicatedStorage.Modules.DataService)
-    end)
-    if success and ds then DataService = ds end
-
-    if not DataService then
-        -- Coba cari di tempat lain
-        local modules = ReplicatedStorage:FindFirstChild("Modules")
-        if modules then
-            local dsMod = modules:FindFirstChild("DataService")
-            if dsMod then
-                success, ds = pcall(require, dsMod)
-                if success and ds then DataService = ds end
-            end
-        end
-    end
-
-    if not DataService then
-        -- Coba dari _G
-        if _G.DataService then DataService = _G.DataService end
-    end
-
-    if not DataService then
-        return nil, "DataService tidak ditemukan di ReplicatedStorage.Modules atau _G"
-    end
-
-    -- Buat module sederhana dengan fungsi dasar
-    local FallbackModule = {}
-
-    function FallbackModule.getAllPets()
-        local data = DataService:GetData()
-        if not data then return {} end
-        local inv = data.PetsData and data.PetsData.PetInventory and data.PetsData.PetInventory.Data
-        return inv or {}
-    end
-
-    function FallbackModule.getEquippedPets()
-        local data = DataService:GetData()
-        if not data then return {} end
-        return data.PetsData and data.PetsData.EquippedPets or {}
-    end
-
-    -- Mapping mutasi
-    local MUTATION_MAP = {
-        ["@"] = "Blossoming",
-        ["J"] = "Oxpecker",
-        ["IN"] = "Inferno",
-        ["X"] = "Venom",
-        ["EM"] = "Ember",
-        ["EV"] = "Everchanted",
-        ["O"] = "Forger",
-        ["A"] = "Nightmare",
-        ["N"] = "Lion",
-        ["i"] = "Mega",
-        ["TS"] = "Transcendent",
-        ["Normal"] = "Normal",
-    }
-
-    function FallbackModule.getAutoMutationName(rawCode)
-        if not rawCode or rawCode == "" then rawCode = "Normal" end
-        return MUTATION_MAP[rawCode] or rawCode
-    end
-
-    function FallbackModule.findPets(filter)
-        filter = filter or {}
-        local allPets = FallbackModule.getAllPets()
-        local results = {}
-        for uuid, pet in pairs(allPets) do
-            local pData = pet.PetData or {}
-            local pType = pet.PetType or pData.PetType or pData.Name or "Unknown"
-            local name = pType
-            local mutationRaw = pData.MutationType or "Normal"
-            local mutation = FallbackModule.getAutoMutationName(mutationRaw)
-            local level = pData.Level or pData.Lvl or 0
-            local weight = pData.Weight or 0
-            local isFavorite = pData.IsFavorite or false
-            local passive = pData.Passive or ""
-
-            -- Cek filter
-            local match = true
-            if filter.name and not string.find(string.lower(name), string.lower(filter.name)) then match = false end
-            if filter.exactName and string.lower(name) ~= string.lower(filter.exactName) then match = false end
-            if filter.type and string.lower(pType) ~= string.lower(filter.type) then match = false end
-            if filter.mutation and string.lower(mutation) ~= string.lower(filter.mutation) then match = false end
-            if filter.isFavorite ~= nil and isFavorite ~= filter.isFavorite then match = false end
-            if filter.minLevel and level < filter.minLevel then match = false end
-            if filter.maxLevel and level > filter.maxLevel then match = false end
-            if filter.minWeight and weight < filter.minWeight then match = false end
-            if filter.maxWeight and weight > filter.maxWeight then match = false end
-            if filter.excludeUUIDs then
-                for _, ex in ipairs(filter.excludeUUIDs) do
-                    if ex == uuid then match = false break end
-                end
-            end
-            if match then
-                table.insert(results, {
-                    uuid = uuid,
-                    pet = pet,
-                    petData = pData,
-                    name = name,
-                    mutation = mutation,
-                    level = level,
-                    weight = weight,
-                    isFavorite = isFavorite,
-                    passive = passive
-                })
-            end
-        end
-        if filter.limit then
-            local limited = {}
-            for i = 1, math.min(filter.limit, #results) do
-                limited[i] = results[i]
-            end
-            return limited
-        end
-        return results
-    end
-
-    return FallbackModule, nil
-end
-
--- ============================================================
--- LOAD DataPetModule (dengan fallback)
--- ============================================================
-
-local DataPetModule = nil
-local loadError = nil
-
--- Coba load dari GitHub
-local success, module = pcall(function()
-    local raw = game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua")
-    return loadstring(raw)()
-end)
-
-if success and module then
-    DataPetModule = module
-    print("✅ DataPetModule dari GitHub berhasil dimuat")
-else
-    print("⚠️ Gagal load dari GitHub, menggunakan fallback...")
-    DataPetModule, loadError = getFallbackDataPetModule()
-    if not DataPetModule then
-        warn("❌ Fallback juga gagal:", loadError)
-        return
-    end
-    print("✅ DataPetModule fallback berhasil dimuat")
-end
-
--- ============================================================
--- LOAD SharkLogic (dengan fallback)
--- ============================================================
-
-local SharkLogic = nil
-local sharkSuccess, sharkModule = pcall(function()
-    local raw = game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/SharkLogic.lua")
-    return loadstring(raw)()
-end)
-
-if sharkSuccess and sharkModule then
-    SharkLogic = sharkModule
-    print("✅ SharkLogic dari GitHub berhasil dimuat")
-else
-    -- Fallback sederhana
-    SharkLogic = {
-        defaultConfig = {
-            slotCFrame = CFrame.new(-13.018989562988, 0, -74.922821044922, 1,0,0,0,1,0,0,0,1)
-        },
-        findTumbal = function(dp, names, ex, minLvl)
-            minLvl = minLvl or 0
-            ex = ex or {}
-            for _, name in ipairs(names) do
-                local results = dp.findPets({
-                    exactName = name,
-                    isFavorite = false,
-                    minLevel = minLvl,
-                    excludeUUIDs = ex,
-                    limit = 10
-                })
-                for _, info in ipairs(results) do
-                    if info.mutation == "Blossoming" then
-                        return info.uuid
-                    end
-                end
-            end
-            return nil
-        end,
-        findTarget = function(dp, targetName, ex)
-            ex = ex or {}
-            local results = dp.findPets({
-                exactName = targetName,
-                isFavorite = false,
-                excludeUUIDs = ex,
-                limit = 1
-            })
-            if #results > 0 then
-                local info = results[1]
-                if info.mutation ~= "Blossoming" then
-                    return info.uuid
-                end
-            end
-            return nil
-        end,
-        equipPet = function(ps, uuid, cframe)
-            if uuid then ps:FireServer("EquipPet", uuid, cframe) end
-        end,
-        unequipPet = function(ps, uuid)
-            if uuid then ps:FireServer("UnequipPet", uuid) end
-        end
-    }
-    print("✅ SharkLogic fallback berhasil dimuat")
-end
-
--- ============================================================
--- LOAD Rayfield
--- ============================================================
-
+-- Load modul
+local DataPetModule = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua"))()
+local SharkLogic = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/SharkLogic.lua"))()
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
-if not Rayfield then
-    warn("❌ Gagal memuat Rayfield")
+
+if not DataPetModule or not SharkLogic or not Rayfield then
+    warn("❌ Gagal memuat modul")
     return
 end
+
+print("✅ Semua modul berhasil dimuat")
 
 -- ============================================================
 -- FUNGSI BANTUAN
 -- ============================================================
 
+-- Format label pet: Mutasi Nama Berat KG Lv.Level
 local function formatPetLabel(pet)
+    -- Gunakan pet.weight yang sudah diambil dari BaseWeight/Weight
     local mut = pet.mutation or "Normal"
     local name = pet.name or "Unknown"
     local weight = pet.weight or 0
@@ -251,6 +38,7 @@ end
 -- ============================================================
 
 local state = {
+    -- Auto Shark
     isActive = false,
     isProcessing = false,
     selectedMimicUUID = nil,
@@ -264,6 +52,7 @@ local state = {
     cycleCount = 0,
     lastActionTime = 0,
 
+    -- Auto Leveling
     isLevelingActive = false,
     levelingTim = {},
     levelingTargets = {},
@@ -271,6 +60,61 @@ local state = {
     currentLevelingTargetIndex = 1,
     currentLevelingTargetUUID = nil,
 }
+
+-- ============================================================
+-- SAVE / LOAD KONFIGURASI
+-- ============================================================
+
+local CONFIG_FILE = "PriaSolo.json"
+
+local function saveConfig()
+    local config = {
+        selectedMimicUUID = state.selectedMimicUUID,
+        selectedSharkUUID = state.selectedSharkUUID,
+        targetQueue = state.targetQueue,
+        tumbalNames = state.tumbalNames,
+        minLevel = state.minLevel,
+        levelingTim = state.levelingTim,
+        levelingTargets = state.levelingTargets,
+        targetLevel = state.targetLevel,
+    }
+    local json = HttpService:JSONEncode(config)
+    local success, err = pcall(function()
+        writefile(CONFIG_FILE, json)
+    end)
+    if success then
+        print("✅ Konfigurasi disimpan ke", CONFIG_FILE)
+    else
+        warn("❌ Gagal menyimpan konfigurasi:", err)
+    end
+end
+
+local function loadConfig()
+    local success, data = pcall(function()
+        return readfile(CONFIG_FILE)
+    end)
+    if not success then
+        print("ℹ️ File konfigurasi tidak ditemukan, gunakan default")
+        return
+    end
+    local decoded = HttpService:JSONDecode(data)
+    if decoded then
+        state.selectedMimicUUID = decoded.selectedMimicUUID
+        state.selectedSharkUUID = decoded.selectedSharkUUID
+        state.targetQueue = decoded.targetQueue or {}
+        state.tumbalNames = decoded.tumbalNames or {"Dog"}
+        state.minLevel = decoded.minLevel or 100
+        state.levelingTim = decoded.levelingTim or {}
+        state.levelingTargets = decoded.levelingTargets or {}
+        state.targetLevel = decoded.targetLevel or 100
+        print("✅ Konfigurasi dimuat dari", CONFIG_FILE)
+    else
+        warn("❌ Gagal memuat konfigurasi")
+    end
+end
+
+-- Auto-load saat startup
+loadConfig()
 
 -- ============================================================
 -- EVENT SERVICE
@@ -498,12 +342,12 @@ end)
 -- ============================================================
 
 local Window = Rayfield:CreateWindow({
-    Name = "Auto Shark",
+    Name = "Pria Solo Hub",
     LoadingTitle = "Memuat...",
     LoadingSubtitle = "by PriaSolo",
     ConfigurationSaving = {
         Enabled = true,
-        FolderName = "AutoShark",
+        FolderName = "PriaSolo",
         FileName = "Settings"
     },
     Key = Enum.KeyCode.K,
@@ -540,6 +384,7 @@ local MimicDropdown = SharkTab:CreateDropdown({
             state.selectedMimicUUID = uuid
             print("✅ Mimic dipilih:", selectedLabel, "UUID:", uuid)
             updateStatusLabel()
+            saveConfig()
         end
     end
 })
@@ -572,6 +417,7 @@ local SharkDropdown = SharkTab:CreateDropdown({
             state.selectedSharkUUID = uuid
             print("✅ Shark dipilih:", selectedLabel, "UUID:", uuid)
             updateStatusLabel()
+            saveConfig()
         end
     end
 })
@@ -590,7 +436,7 @@ local function refreshSharkDropdown()
     SharkDropdown:Refresh(options)
 end
 
--- Dropdown Target (Multiple, Non-Fav, Mutasi Normal)
+-- Dropdown Target (Multiple)
 local targetLabelToUUID = {}
 local TargetDropdown = SharkTab:CreateDropdown({
     Name = "Pilih Target (Multiple, Non-Fav, Normal)",
@@ -606,6 +452,7 @@ local TargetDropdown = SharkTab:CreateDropdown({
         state.currentTargetIndex = 1
         print("✅ Target dipilih:", #state.targetQueue, "pet")
         updateStatusLabel()
+        saveConfig()
     end
 })
 
@@ -643,6 +490,7 @@ SharkTab:CreateInput({
             if #names > 0 then
                 state.tumbalNames = names
                 print("✅ Tumbal diubah:", table.concat(names, ", "))
+                saveConfig()
             end
         end
     end
@@ -658,6 +506,7 @@ SharkTab:CreateSlider({
     Callback = function(value)
         state.minLevel = value
         print("📊 Min Level Tumbal:", value)
+        saveConfig()
     end
 })
 
@@ -735,6 +584,7 @@ local TimDropdown = LevelingTab:CreateDropdown({
             table.move(state.levelingTim, 1, 7, 1, {})
         end
         print("✅ Tim Leveling dipilih:", #state.levelingTim, "pet")
+        saveConfig()
     end
 })
 
@@ -767,6 +617,7 @@ local TargetLevelDropdown = LevelingTab:CreateDropdown({
         end
         state.currentLevelingTargetIndex = 1
         print("✅ Target Leveling dipilih:", #state.levelingTargets, "pet")
+        saveConfig()
     end
 })
 
@@ -794,6 +645,7 @@ LevelingTab:CreateSlider({
     Callback = function(value)
         state.targetLevel = value
         print("🎯 Target Level:", value)
+        saveConfig()
     end
 })
 
@@ -841,4 +693,4 @@ refreshTimDropdown()
 refreshTargetLevelDropdown()
 updateStatusLabel()
 
-print("✅ Auto Shark siap. Tekan K untuk membuka UI.")
+print("✅ PriaSolo siap. Tekan K untuk membuka UI.")
