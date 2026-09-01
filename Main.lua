@@ -4,7 +4,9 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
+local CONFIG_FILE = "PriaSolo.json"
 
 -- Load modul
 local DataPetModule = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua"))()
@@ -19,27 +21,36 @@ end
 print("✅ Semua modul berhasil dimuat")
 
 -- ============================================================
--- KONFIGURASI FILE
--- ============================================================
-local CONFIG_FILE = "PriaSolo.json"
-
--- ============================================================
 -- FUNGSI BANTUAN
 -- ============================================================
+
+-- Format label pet: Mutasi Nama Berat KG Lv.Level
 local function formatPetLabel(pet)
     local mut = pet.mutation or "Normal"
     local name = pet.name or "Unknown"
+    -- Ambil weight dari pet, jika 0 atau nil gunakan estimasi
     local weight = pet.weight or 0
+    if weight <= 0 then
+        local baseWeight = (pet.petData and pet.petData.BaseWeight) or 0
+        local level = pet.level or 1
+        weight = baseWeight + (level - 1) * 0.5599 -- growth rate
+    end
     local level = pet.level or 1
     return string.format("%s %s %.2f KG Lv.%d", mut, name, weight, level)
+end
+
+-- Fungsi untuk sorting abjad
+local function sortAlphabetically(a, b)
+    return string.lower(a) < string.lower(b)
 end
 
 -- ============================================================
 -- STATE GLOBAL
 -- ============================================================
+
 local state = {
     -- Auto Shark
-    isActive = false,
+    isSharkActive = false,
     isProcessing = false,
     selectedMimicUUID = nil,
     selectedSharkUUID = nil,
@@ -62,60 +73,9 @@ local state = {
 }
 
 -- ============================================================
--- SAVE / LOAD
--- ============================================================
-local function saveConfig()
-    local config = {
-        selectedMimicUUID = state.selectedMimicUUID,
-        selectedSharkUUID = state.selectedSharkUUID,
-        targetQueue = state.targetQueue,
-        tumbalNames = state.tumbalNames,
-        minLevel = state.minLevel,
-        levelingTim = state.levelingTim,
-        levelingTargets = state.levelingTargets,
-        targetLevel = state.targetLevel,
-    }
-    local json = game:GetService("HttpService"):JSONEncode(config)
-    local success, err = pcall(function()
-        writefile(CONFIG_FILE, json)
-    end)
-    if success then
-        print("✅ Konfigurasi disimpan ke", CONFIG_FILE)
-    else
-        warn("❌ Gagal menyimpan:", err)
-    end
-end
-
-local function loadConfig()
-    local success, data = pcall(function()
-        return readfile(CONFIG_FILE)
-    end)
-    if not success then
-        print("ℹ️ File konfigurasi tidak ditemukan, menggunakan default")
-        return
-    end
-    local decoded = game:GetService("HttpService"):JSONDecode(data)
-    if decoded then
-        state.selectedMimicUUID = decoded.selectedMimicUUID
-        state.selectedSharkUUID = decoded.selectedSharkUUID
-        state.targetQueue = decoded.targetQueue or {}
-        state.tumbalNames = decoded.tumbalNames or {"Dog"}
-        state.minLevel = decoded.minLevel or 100
-        state.levelingTim = decoded.levelingTim or {}
-        state.levelingTargets = decoded.levelingTargets or {}
-        state.targetLevel = decoded.targetLevel or 100
-        print("✅ Konfigurasi dimuat dari", CONFIG_FILE)
-        -- Refresh UI setelah load
-        refreshAllDropdowns()
-        updateStatusLabel()
-    else
-        warn("❌ Gagal memuat file")
-    end
-end
-
--- ============================================================
 -- EVENT SERVICE
 -- ============================================================
+
 local GameEvents = ReplicatedStorage:WaitForChild("GameEvents")
 local PetCooldownsEvent = GameEvents:WaitForChild("PetCooldownsUpdated")
 local PetsService = GameEvents:WaitForChild("PetsService")
@@ -124,6 +84,7 @@ local NotificationEvent = GameEvents:WaitForChild("Notification")
 -- ============================================================
 -- FUNGSI LOGIKA AUTO SHARK
 -- ============================================================
+
 local function unequipTargetAndEquipShark()
     if state.currentTargetUUID then
         SharkLogic.unequipPet(PetsService, state.currentTargetUUID)
@@ -187,6 +148,7 @@ end
 -- ============================================================
 -- FUNGSI LOGIKA AUTO LEVELING
 -- ============================================================
+
 local function unequipAllGardenPets()
     local data = DataPetModule.getAllPets()
     if not data then return end
@@ -271,8 +233,10 @@ local function startLeveling()
         return
     end
 
+    -- Bersihkan garden
     unequipAllGardenPets()
     task.wait(0.5)
+
     equipLevelingTim()
     print("✅ Tim leveling di-equip")
 
@@ -290,12 +254,13 @@ local function stopLeveling()
 end
 
 -- ============================================================
--- EVENT LISTENER
+-- EVENT LISTENER (Cooldown untuk Auto Shark)
 -- ============================================================
+
 local isHandlingCooldownEvent = false
 
 PetCooldownsEvent.OnClientEvent:Connect(function(petId, dataArray)
-    if state.isActive and petId == state.selectedMimicUUID and not isHandlingCooldownEvent then
+    if state.isSharkActive and petId == state.selectedMimicUUID and not isHandlingCooldownEvent then
         local time = nil
         for _, entry in ipairs(dataArray) do
             if entry.Time then time = entry.Time break end
@@ -323,7 +288,7 @@ PetCooldownsEvent.OnClientEvent:Connect(function(petId, dataArray)
 end)
 
 NotificationEvent.OnClientEvent:Connect(function(message)
-    if state.isActive and state.isProcessing and type(message) == "string" and string.find(message, "Mimic Octopus") then
+    if state.isSharkActive and state.isProcessing and type(message) == "string" and string.find(message, "Mimic Octopus") then
         if string.find(message, "spat its Blossoming mutation onto") or string.find(message, "mutation failed to transfer") then
             unequipTargetAndEquipShark()
         end
@@ -331,11 +296,65 @@ NotificationEvent.OnClientEvent:Connect(function(message)
 end)
 
 -- ============================================================
+-- SAVE / LOAD
+-- ============================================================
+
+local function saveConfig()
+    local config = {
+        selectedMimicUUID = state.selectedMimicUUID,
+        selectedSharkUUID = state.selectedSharkUUID,
+        targetQueue = state.targetQueue,
+        tumbalNames = state.tumbalNames,
+        minLevel = state.minLevel,
+        levelingTim = state.levelingTim,
+        levelingTargets = state.levelingTargets,
+        targetLevel = state.targetLevel,
+        timestamp = os.time()
+    }
+    local json = HttpService:JSONEncode(config)
+    local success, err = pcall(function()
+        writefile(CONFIG_FILE, json)
+    end)
+    if success then
+        print("✅ Konfigurasi disimpan ke " .. CONFIG_FILE)
+    else
+        warn("❌ Gagal menyimpan: " .. tostring(err))
+    end
+end
+
+local function loadConfig()
+    local success, data = pcall(function()
+        return readfile(CONFIG_FILE)
+    end)
+    if not success then
+        print("ℹ️ File konfigurasi tidak ditemukan, gunakan default.")
+        return
+    end
+    local decoded = HttpService:JSONDecode(data)
+    if decoded then
+        state.selectedMimicUUID = decoded.selectedMimicUUID
+        state.selectedSharkUUID = decoded.selectedSharkUUID
+        state.targetQueue = decoded.targetQueue or {}
+        state.tumbalNames = decoded.tumbalNames or {"Dog"}
+        state.minLevel = decoded.minLevel or 100
+        state.levelingTim = decoded.levelingTim or {}
+        state.levelingTargets = decoded.levelingTargets or {}
+        state.targetLevel = decoded.targetLevel or 100
+        print("✅ Konfigurasi dimuat dari " .. CONFIG_FILE)
+        -- Refresh UI setelah load
+        refreshAllUI()
+    else
+        warn("❌ Gagal memuat file.")
+    end
+end
+
+-- ============================================================
 -- UI (Rayfield)
 -- ============================================================
+
 local Window = Rayfield:CreateWindow({
     Name = "Pria Solo HUB",
-    LoadingTitle = "Memuat Pria Solo HUB...",
+    LoadingTitle = "Memuat...",
     LoadingSubtitle = "by PriaSolo",
     ConfigurationSaving = {
         Enabled = true,
@@ -350,6 +369,7 @@ local Window = Rayfield:CreateWindow({
 -- ============================================================
 -- TAB 1: AUTO SHARK
 -- ============================================================
+
 local SharkTab = Window:CreateTab("Auto Shark")
 
 local StatusLabel = SharkTab:CreateLabel("Mimic: (belum) | Shark: (belum) | Target: 0 terpilih")
@@ -361,14 +381,68 @@ local function updateStatusLabel()
     StatusLabel:Set("Mimic: " .. mimicText .. " | Shark: " .. sharkText .. " | Target: " .. targetCount .. " terpilih")
 end
 
--- Dropdown Mimic
+-- Fungsi refresh all UI (untuk load)
+local function refreshAllUI()
+    refreshMimicDropdown()
+    refreshSharkDropdown()
+    refreshTargetDropdown()
+    refreshTimDropdown()
+    refreshTargetLevelDropdown()
+    updateStatusLabel()
+    -- Set input fields
+    if TumbalInput then
+        TumbalInput:Set(table.concat(state.tumbalNames, ", "))
+    end
+    if MinLevelSlider then
+        MinLevelSlider:Set(state.minLevel)
+    end
+    if TargetLevelSlider then
+        TargetLevelSlider:Set(state.targetLevel)
+    end
+end
+
+-- ============================================================
+-- DROPDOWN MIMIC (dengan filter)
+-- ============================================================
+
 local mimicLabelToUUID = {}
-local MimicDropdown = SharkTab:CreateDropdown({
+local MimicDropdown
+local MimicFilterInput
+
+local function refreshMimicDropdown(filterText)
+    filterText = filterText or (MimicFilterInput and MimicFilterInput:Get() or "")
+    local hasil = DataPetModule.findPets({ name = "Mimic", isFavorite = true })
+    local options = {}
+    mimicLabelToUUID = {}
+    for _, pet in ipairs(hasil) do
+        local label = formatPetLabel(pet)
+        if string.lower(label):find(string.lower(filterText)) then
+            if mimicLabelToUUID[label] then
+                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
+            end
+            table.insert(options, label)
+            mimicLabelToUUID[label] = pet.uuid
+        end
+    end
+    table.sort(options, sortAlphabetically)
+    if #options == 0 then options = {"❌ Tidak ada Mimic favorit"} end
+    MimicDropdown:Refresh(options)
+end
+
+MimicFilterInput = SharkTab:CreateInput({
+    Name = "🔍 Cari Mimic",
+    PlaceholderText = "Ketik untuk filter...",
+    CurrentValue = "",
+    Callback = function(Value)
+        refreshMimicDropdown(Value)
+    end
+})
+
+MimicDropdown = SharkTab:CreateDropdown({
     Name = "Pilih Mimic",
     Options = {"Memuat data..."},
     CurrentOption = "Memuat data...",
     MultipleOptions = false,
-    Search = true,
     Callback = function(option)
         local selectedLabel = (type(option) == "table") and option[1] or option
         local uuid = mimicLabelToUUID[selectedLabel]
@@ -380,29 +454,48 @@ local MimicDropdown = SharkTab:CreateDropdown({
     end
 })
 
-local function refreshMimicDropdown()
-    local hasil = DataPetModule.findPets({ name = "Mimic", isFavorite = true })
+-- ============================================================
+-- DROPDOWN SHARK (dengan filter)
+-- ============================================================
+
+local sharkLabelToUUID = {}
+local SharkDropdown
+local SharkFilterInput
+
+local function refreshSharkDropdown(filterText)
+    filterText = filterText or (SharkFilterInput and SharkFilterInput:Get() or "")
+    local hasil = DataPetModule.findPets({ name = "Shark", isFavorite = true })
     local options = {}
-    mimicLabelToUUID = {}
+    sharkLabelToUUID = {}
     for _, pet in ipairs(hasil) do
         local label = formatPetLabel(pet)
-        if mimicLabelToUUID[label] then label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]" end
-        table.insert(options, label)
-        mimicLabelToUUID[label] = pet.uuid
+        if string.lower(label):find(string.lower(filterText)) then
+            if sharkLabelToUUID[label] then
+                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
+            end
+            table.insert(options, label)
+            sharkLabelToUUID[label] = pet.uuid
+        end
     end
-    table.sort(options)
-    if #options == 0 then options = {"❌ Tidak ada Mimic favorit"} end
-    MimicDropdown:Refresh(options)
+    table.sort(options, sortAlphabetically)
+    if #options == 0 then options = {"❌ Tidak ada Shark favorit"} end
+    SharkDropdown:Refresh(options)
 end
 
--- Dropdown Shark
-local sharkLabelToUUID = {}
-local SharkDropdown = SharkTab:CreateDropdown({
+SharkFilterInput = SharkTab:CreateInput({
+    Name = "🔍 Cari Shark",
+    PlaceholderText = "Ketik untuk filter...",
+    CurrentValue = "",
+    Callback = function(Value)
+        refreshSharkDropdown(Value)
+    end
+})
+
+SharkDropdown = SharkTab:CreateDropdown({
     Name = "Pilih Shark",
     Options = {"Memuat data..."},
     CurrentOption = "Memuat data...",
     MultipleOptions = false,
-    Search = true,
     Callback = function(option)
         local selectedLabel = (type(option) == "table") and option[1] or option
         local uuid = sharkLabelToUUID[selectedLabel]
@@ -414,29 +507,53 @@ local SharkDropdown = SharkTab:CreateDropdown({
     end
 })
 
-local function refreshSharkDropdown()
-    local hasil = DataPetModule.findPets({ name = "Shark", isFavorite = true })
+-- ============================================================
+-- DROPDOWN TARGET (Multiple, Non-Fav, Normal)
+-- ============================================================
+
+local targetLabelToUUID = {}
+local TargetDropdown
+local TargetFilterInput
+
+local function refreshTargetDropdown(filterText)
+    filterText = filterText or (TargetFilterInput and TargetFilterInput:Get() or "")
+    local hasil = DataPetModule.findPets({
+        type = "Mimic Octopus",
+        isFavorite = false,
+        mutation = "Normal",
+        excludeUUIDs = {state.selectedMimicUUID, state.selectedSharkUUID}
+    })
     local options = {}
-    sharkLabelToUUID = {}
+    targetLabelToUUID = {}
     for _, pet in ipairs(hasil) do
         local label = formatPetLabel(pet)
-        if sharkLabelToUUID[label] then label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]" end
-        table.insert(options, label)
-        sharkLabelToUUID[label] = pet.uuid
+        if string.lower(label):find(string.lower(filterText)) then
+            if targetLabelToUUID[label] then
+                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
+            end
+            table.insert(options, label)
+            targetLabelToUUID[label] = pet.uuid
+        end
     end
-    table.sort(options)
-    if #options == 0 then options = {"❌ Tidak ada Shark favorit"} end
-    SharkDropdown:Refresh(options)
+    table.sort(options, sortAlphabetically)
+    if #options == 0 then options = {"❌ Tidak ada target"} end
+    TargetDropdown:Refresh(options)
 end
 
--- Dropdown Target
-local targetLabelToUUID = {}
-local TargetDropdown = SharkTab:CreateDropdown({
+TargetFilterInput = SharkTab:CreateInput({
+    Name = "🔍 Cari Target",
+    PlaceholderText = "Ketik untuk filter...",
+    CurrentValue = "",
+    Callback = function(Value)
+        refreshTargetDropdown(Value)
+    end
+})
+
+TargetDropdown = SharkTab:CreateDropdown({
     Name = "Pilih Target (Multiple, Non-Fav, Normal)",
     Options = {"Memuat data..."},
     CurrentOption = "Memuat data...",
     MultipleOptions = true,
-    Search = true,
     Callback = function(selectedLabels)
         state.targetQueue = {}
         for _, label in ipairs(selectedLabels) do
@@ -449,28 +566,11 @@ local TargetDropdown = SharkTab:CreateDropdown({
     end
 })
 
-local function refreshTargetDropdown()
-    local hasil = DataPetModule.findPets({
-        type = "Mimic Octopus",
-        isFavorite = false,
-        mutation = "Normal",
-        excludeUUIDs = {state.selectedMimicUUID, state.selectedSharkUUID}
-    })
-    local options = {}
-    targetLabelToUUID = {}
-    for _, pet in ipairs(hasil) do
-        local label = formatPetLabel(pet)
-        if targetLabelToUUID[label] then label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]" end
-        table.insert(options, label)
-        targetLabelToUUID[label] = pet.uuid
-    end
-    table.sort(options)
-    if #options == 0 then options = {"❌ Tidak ada target"} end
-    TargetDropdown:Refresh(options)
-end
+-- ============================================================
+-- TUMBAL INPUT
+-- ============================================================
 
--- Input Tumbal
-SharkTab:CreateInput({
+local TumbalInput = SharkTab:CreateInput({
     Name = "Nama Tumbal (pisah koma)",
     PlaceholderText = "Contoh: Dog, Golden Lab, Black Bunny",
     CurrentValue = table.concat(state.tumbalNames, ", "),
@@ -489,8 +589,11 @@ SharkTab:CreateInput({
     end
 })
 
--- Slider Min Level
-SharkTab:CreateSlider({
+-- ============================================================
+-- SLIDER MIN LEVEL
+-- ============================================================
+
+local MinLevelSlider = SharkTab:CreateSlider({
     Name = "Min Level Tumbal",
     Range = {0, 500},
     Increment = 1,
@@ -502,21 +605,37 @@ SharkTab:CreateSlider({
     end
 })
 
--- Refresh Button
+-- ============================================================
+-- REFRESH BUTTON
+-- ============================================================
+
 SharkTab:CreateButton({
     Name = "🔄 Refresh Daftar Pet",
     Callback = function()
-        refreshAllDropdowns()
+        refreshMimicDropdown()
+        refreshSharkDropdown()
+        refreshTargetDropdown()
+        refreshTimDropdown()
+        refreshTargetLevelDropdown()
     end
 })
 
--- Start/Stop Toggle
+-- ============================================================
+-- START/STOP SHARK
+-- ============================================================
+
 local SharkToggle
 SharkToggle = SharkTab:CreateToggle({
-    Name = "▶️ Start / Stop",
+    Name = "▶️ Start / Stop Shark",
     CurrentValue = false,
     Callback = function(Value)
         if Value then
+            -- Cek apakah leveling aktif
+            if state.isLevelingActive then
+                print("⚠️ Auto Leveling sedang aktif! Matikan dulu.")
+                if SharkToggle then SharkToggle:Set(false) end
+                return
+            end
             if not state.selectedMimicUUID then
                 print("⚠️ Pilih Mimic dulu!")
                 if SharkToggle then SharkToggle:Set(false) end
@@ -532,14 +651,20 @@ SharkToggle = SharkTab:CreateToggle({
                 if SharkToggle then SharkToggle:Set(false) end
                 return
             end
-            state.isActive = true
+
+            -- Bersihkan garden
+            unequipAllGardenPets()
+            task.wait(0.5)
+
+            state.isSharkActive = true
             print("▶️ Auto Shark dimulai dengan", #state.targetQueue, "target")
             SharkLogic.equipPet(PetsService, state.selectedMimicUUID, SharkLogic.defaultConfig.slotCFrame)
             SharkLogic.equipPet(PetsService, state.selectedSharkUUID, SharkLogic.defaultConfig.slotCFrame)
         else
-            state.isActive = false
+            state.isSharkActive = false
             print("⏹️ Auto Shark dihentikan")
             unequipTargetAndEquipShark()
+            unequipAllGardenPets()
             if state.selectedMimicUUID then
                 SharkLogic.unequipPet(PetsService, state.selectedMimicUUID)
             end
@@ -553,16 +678,51 @@ SharkToggle = SharkTab:CreateToggle({
 -- ============================================================
 -- TAB 2: AUTO LEVELING
 -- ============================================================
+
 local LevelingTab = Window:CreateTab("Auto Leveling")
 
--- Tim Leveling
+-- ============================================================
+-- DROPDOWN TIM LEVELING (Favorit, max 7)
+-- ============================================================
+
 local timLabelToUUID = {}
-local TimDropdown = LevelingTab:CreateDropdown({
+local TimDropdown
+local TimFilterInput
+
+local function refreshTimDropdown(filterText)
+    filterText = filterText or (TimFilterInput and TimFilterInput:Get() or "")
+    local hasil = DataPetModule.findPets({ isFavorite = true })
+    local options = {}
+    timLabelToUUID = {}
+    for _, pet in ipairs(hasil) do
+        local label = formatPetLabel(pet)
+        if string.lower(label):find(string.lower(filterText)) then
+            if timLabelToUUID[label] then
+                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
+            end
+            table.insert(options, label)
+            timLabelToUUID[label] = pet.uuid
+        end
+    end
+    table.sort(options, sortAlphabetically)
+    if #options == 0 then options = {"❌ Tidak ada pet favorit"} end
+    TimDropdown:Refresh(options)
+end
+
+TimFilterInput = LevelingTab:CreateInput({
+    Name = "🔍 Cari Tim",
+    PlaceholderText = "Ketik untuk filter...",
+    CurrentValue = "",
+    Callback = function(Value)
+        refreshTimDropdown(Value)
+    end
+})
+
+TimDropdown = LevelingTab:CreateDropdown({
     Name = "Tim Leveling (Max 7, Favorit)",
     Options = {"Memuat data..."},
     CurrentOption = "Memuat data...",
     MultipleOptions = true,
-    Search = true,
     Callback = function(selectedLabels)
         state.levelingTim = {}
         for _, label in ipairs(selectedLabels) do
@@ -577,29 +737,48 @@ local TimDropdown = LevelingTab:CreateDropdown({
     end
 })
 
-local function refreshTimDropdown()
-    local hasil = DataPetModule.findPets({ isFavorite = true })
+-- ============================================================
+-- DROPDOWN TARGET LEVELING (Non-Favorit)
+-- ============================================================
+
+local targetLevelLabelToUUID = {}
+local TargetLevelDropdown
+local TargetLevelFilterInput
+
+local function refreshTargetLevelDropdown(filterText)
+    filterText = filterText or (TargetLevelFilterInput and TargetLevelFilterInput:Get() or "")
+    local hasil = DataPetModule.findPets({ isFavorite = false })
     local options = {}
-    timLabelToUUID = {}
+    targetLevelLabelToUUID = {}
     for _, pet in ipairs(hasil) do
         local label = formatPetLabel(pet)
-        if timLabelToUUID[label] then label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]" end
-        table.insert(options, label)
-        timLabelToUUID[label] = pet.uuid
+        if string.lower(label):find(string.lower(filterText)) then
+            if targetLevelLabelToUUID[label] then
+                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
+            end
+            table.insert(options, label)
+            targetLevelLabelToUUID[label] = pet.uuid
+        end
     end
-    table.sort(options)
-    if #options == 0 then options = {"❌ Tidak ada pet favorit"} end
-    TimDropdown:Refresh(options)
+    table.sort(options, sortAlphabetically)
+    if #options == 0 then options = {"❌ Tidak ada pet non-favorit"} end
+    TargetLevelDropdown:Refresh(options)
 end
 
--- Target Leveling
-local targetLevelLabelToUUID = {}
-local TargetLevelDropdown = LevelingTab:CreateDropdown({
+TargetLevelFilterInput = LevelingTab:CreateInput({
+    Name = "🔍 Cari Target Leveling",
+    PlaceholderText = "Ketik untuk filter...",
+    CurrentValue = "",
+    Callback = function(Value)
+        refreshTargetLevelDropdown(Value)
+    end
+})
+
+TargetLevelDropdown = LevelingTab:CreateDropdown({
     Name = "Target Leveling (Non-Favorit)",
     Options = {"Memuat data..."},
     CurrentOption = "Memuat data...",
     MultipleOptions = true,
-    Search = true,
     Callback = function(selectedLabels)
         state.levelingTargets = {}
         for _, label in ipairs(selectedLabels) do
@@ -611,23 +790,11 @@ local TargetLevelDropdown = LevelingTab:CreateDropdown({
     end
 })
 
-local function refreshTargetLevelDropdown()
-    local hasil = DataPetModule.findPets({ isFavorite = false })
-    local options = {}
-    targetLevelLabelToUUID = {}
-    for _, pet in ipairs(hasil) do
-        local label = formatPetLabel(pet)
-        if targetLevelLabelToUUID[label] then label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]" end
-        table.insert(options, label)
-        targetLevelLabelToUUID[label] = pet.uuid
-    end
-    table.sort(options)
-    if #options == 0 then options = {"❌ Tidak ada pet non-favorit"} end
-    TargetLevelDropdown:Refresh(options)
-end
+-- ============================================================
+-- SLIDER TARGET LEVEL
+-- ============================================================
 
--- Slider Target Level
-LevelingTab:CreateSlider({
+local TargetLevelSlider = LevelingTab:CreateSlider({
     Name = "Target Level",
     Range = {0, 500},
     Increment = 1,
@@ -639,22 +806,22 @@ LevelingTab:CreateSlider({
     end
 })
 
--- Refresh Button
-LevelingTab:CreateButton({
-    Name = "🔄 Refresh Daftar Pet",
-    Callback = function()
-        refreshTimDropdown()
-        refreshTargetLevelDropdown()
-    end
-})
+-- ============================================================
+-- START/STOP LEVELING
+-- ============================================================
 
--- Start/Stop Toggle Leveling
 local LevelingToggle
 LevelingToggle = LevelingTab:CreateToggle({
     Name = "▶️ Start / Stop Leveling",
     CurrentValue = false,
     Callback = function(Value)
         if Value then
+            -- Cek apakah shark aktif
+            if state.isSharkActive then
+                print("⚠️ Auto Shark sedang aktif! Matikan dulu.")
+                if LevelingToggle then LevelingToggle:Set(false) end
+                return
+            end
             if #state.levelingTim == 0 then
                 print("⚠️ Pilih Tim Leveling dulu!")
                 if LevelingToggle then LevelingToggle:Set(false) end
@@ -673,38 +840,63 @@ LevelingToggle = LevelingTab:CreateToggle({
 })
 
 -- ============================================================
--- REFRESH ALL
+-- TOMBOL SAVE / LOAD
 -- ============================================================
-function refreshAllDropdowns()
-    refreshMimicDropdown()
-    refreshSharkDropdown()
-    refreshTargetDropdown()
-    refreshTimDropdown()
-    refreshTargetLevelDropdown()
-end
 
--- ============================================================
--- SAVE / LOAD BUTTON
--- ============================================================
-local function createSaveLoadButtons(tab)
+local function saveLoadTab()
+    local tab = Window:CreateTab("Save / Load")
+
     tab:CreateButton({
-        Name = "💾 Save Config",
+        Name = "💾 Simpan Konfigurasi",
         Callback = saveConfig
     })
+
     tab:CreateButton({
-        Name = "📂 Load Config",
-        Callback = loadConfig
+        Name = "📂 Muat Konfigurasi",
+        Callback = function()
+            loadConfig()
+        end
+    })
+
+    tab:CreateButton({
+        Name = "🔄 Reset Semua (Hati-hati!)",
+        Callback = function()
+            -- Hentikan semua proses
+            if state.isSharkActive then
+                state.isSharkActive = false
+                unequipTargetAndEquipShark()
+                unequipAllGardenPets()
+                if state.selectedMimicUUID then
+                    SharkLogic.unequipPet(PetsService, state.selectedMimicUUID)
+                end
+                if state.selectedSharkUUID then
+                    SharkLogic.unequipPet(PetsService, state.selectedSharkUUID)
+                end
+            end
+            if state.isLevelingActive then
+                stopLeveling()
+            end
+            -- Reset state
+            state.selectedMimicUUID = nil
+            state.selectedSharkUUID = nil
+            state.targetQueue = {}
+            state.levelingTim = {}
+            state.levelingTargets = {}
+            state.tumbalNames = {"Dog"}
+            state.minLevel = 100
+            state.targetLevel = 100
+            -- Refresh UI
+            refreshAllUI()
+            print("🔄 Semua reset")
+        end
     })
 end
-
-createSaveLoadButtons(SharkTab)
-createSaveLoadButtons(LevelingTab)
 
 -- ============================================================
 -- INISIALISASI
 -- ============================================================
-loadConfig()
-refreshAllDropdowns()
-updateStatusLabel()
+
+refreshAllUI()
+saveLoadTab()
 
 print("✅ Pria Solo HUB siap. Tekan K untuk membuka UI.")
