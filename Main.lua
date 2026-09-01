@@ -108,7 +108,7 @@ NotificationEvent.OnClientEvent:Connect(function(message)
 end)
 
 -- ============================================================
--- WEIGHT ESTIMATION (kalibrasi dari data Lion: BaseWeight 5.549 -> 284.92 KG @ Level 500)
+-- WEIGHT ESTIMATION
 -- ============================================================
 
 local WEIGHT_GROWTH_RATE = 0.5599
@@ -139,53 +139,66 @@ local Window = Rayfield:CreateWindow({
 
 local MainTab = Window:CreateTab("Auto Shark")
 
--- Helper: format label pet (pakai estimasi weight, BUKAN BaseWeight mentah)
 local function formatPetLabel(pet)
     local rawBaseWeight = (pet.petData and pet.petData.BaseWeight) or 0
     local estimatedWeight = estimateWeight(rawBaseWeight, pet.level)
     return string.format("%s %s %.2f KG Lv.%d", pet.mutation, pet.name, estimatedWeight, pet.level)
 end
 
--- Helper: cari pet favorit berdasarkan keyword nama (partial match, case-insensitive)
 local function getFavoritesByKeyword(keyword)
     return DataPetModule.findPets({ name = keyword, isFavorite = true })
 end
 
--- Mapping label -> uuid (dipakai ulang saat dropdown callback jalan)
 local mimicLabelToUUID = {}
 local sharkLabelToUUID = {}
 
--- 1. Dropdown Mimic (petType mengandung "Mimic", isFavorite = true)
+-- Label status buat konfirmasi visual pilihan
+local StatusLabel = MainTab:CreateLabel("Mimic: (belum dipilih) | Shark: (belum dipilih)")
+
+local function updateStatusLabel()
+    local mimicText = state.selectedMimicUUID and tostring(state.selectedMimicUUID) or "(belum dipilih)"
+    local sharkText = state.selectedSharkUUID and tostring(state.selectedSharkUUID) or "(belum dipilih)"
+    StatusLabel:Set("Mimic: " .. mimicText .. " | Shark: " .. sharkText)
+end
+
+-- 1. Dropdown Mimic (CurrentOption sekarang STRING, bukan table)
 local MimicDropdown = MainTab:CreateDropdown({
     Name = "Pilih Mimic",
     Options = {"Memuat data..."},
-    CurrentOption = {"Memuat data..."},
+    CurrentOption = "Memuat data...",
     MultipleOptions = false,
     Callback = function(option)
+        print("[DEBUG] Mimic dropdown callback dipanggil dengan:", option)
         local uuid = mimicLabelToUUID[option]
         if uuid then
             state.selectedMimicUUID = uuid
-            print("✅ Mimic dipilih:", option)
+            print("✅ Mimic dipilih:", option, "UUID:", uuid)
+            updateStatusLabel()
+        else
+            warn("⚠️ UUID tidak ditemukan untuk label:", option)
         end
     end
 })
 
--- 2. Dropdown Shark (petType mengandung "Shark", isFavorite = true)
+-- 2. Dropdown Shark (CurrentOption sekarang STRING, bukan table)
 local SharkDropdown = MainTab:CreateDropdown({
     Name = "Pilih Shark",
     Options = {"Memuat data..."},
-    CurrentOption = {"Memuat data..."},
+    CurrentOption = "Memuat data...",
     MultipleOptions = false,
     Callback = function(option)
+        print("[DEBUG] Shark dropdown callback dipanggil dengan:", option)
         local uuid = sharkLabelToUUID[option]
         if uuid then
             state.selectedSharkUUID = uuid
-            print("✅ Shark dipilih:", option)
+            print("✅ Shark dipilih:", option, "UUID:", uuid)
+            updateStatusLabel()
+        else
+            warn("⚠️ UUID tidak ditemukan untuk label:", option)
         end
     end
 })
 
--- Fungsi refresh dropdown Mimic
 local function refreshMimicDropdown()
     local hasil = getFavoritesByKeyword("Mimic")
     local options = {}
@@ -204,7 +217,6 @@ local function refreshMimicDropdown()
     MimicDropdown:Refresh(options)
 end
 
--- Fungsi refresh dropdown Shark
 local function refreshSharkDropdown()
     local hasil = getFavoritesByKeyword("Shark")
     local options = {}
@@ -223,7 +235,6 @@ local function refreshSharkDropdown()
     SharkDropdown:Refresh(options)
 end
 
--- Tombol refresh manual (jaga-jaga kalau data telat load)
 MainTab:CreateButton({
     Name = "🔄 Refresh Daftar Pet",
     Callback = function()
@@ -232,7 +243,6 @@ MainTab:CreateButton({
     end
 })
 
--- Input Target & Tumbal
 MainTab:CreateInput({
     Name = "Nama Target",
     PlaceholderText = "Contoh: Moon Cat",
@@ -265,8 +275,6 @@ MainTab:CreateInput({
     end
 })
 
--- 3. Toggle Start/Stop (elemen paling bawah)
--- PENTING: deklarasi & assignment dipisah supaya tidak nil saat callback dipanggil
 local StartToggle
 StartToggle = MainTab:CreateToggle({
     Name = "▶️ Start / Stop",
@@ -301,7 +309,6 @@ StartToggle = MainTab:CreateToggle({
     end
 })
 
--- Load awal
 refreshMimicDropdown()
 refreshSharkDropdown()
 
