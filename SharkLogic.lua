@@ -7,52 +7,36 @@ SharkLogic.defaultConfig = {
 }
 
 -- Mencari tumbal dengan syarat:
--- - Nama pet sesuai (exact match)
+-- - Nama pet sesuai (exact match, case-insensitive)
 -- - Bukan favorit
 -- - Level >= minLevel
--- - Mutasi = "Blossoming" (WAJIB)
+-- - Mutasi = "Blossoming" (WAJIB untuk SEMUA tumbal)
 -- - Tidak termasuk excludeUUIDs
 function SharkLogic.findTumbal(dataPetModule, tumbalNames, excludeUUIDs, minLevel)
     minLevel = minLevel or 0
     excludeUUIDs = excludeUUIDs or {}
     for _, name in ipairs(tumbalNames) do
+        -- Cari pet dengan nama tersebut
         local results = dataPetModule.findPets({
             exactName = name,
             isFavorite = false,
             minLevel = minLevel,
             excludeUUIDs = excludeUUIDs,
-            limit = 10
+            limit = 10  -- ambil beberapa, nanti kita filter Blossoming
         })
+        -- Filter: hanya yang mutasi Blossoming
         for _, petInfo in ipairs(results) do
             if petInfo.mutation == "Blossoming" then
                 return petInfo.uuid
             end
         end
+        -- Jika tidak ada yang Blossoming, lanjut ke nama tumbal berikutnya
     end
     return nil
 end
 
--- Mencari target dengan syarat:
--- - Nama pet sesuai (exact match)
--- - Bukan favorit
--- - Mutasi = "Normal" (tanpa mutasi)
--- - Tidak termasuk excludeUUIDs
-function SharkLogic.findTarget(dataPetModule, targetName, excludeUUIDs)
-    excludeUUIDs = excludeUUIDs or {}
-    local results = dataPetModule.findPets({
-        exactName = targetName,
-        isFavorite = false,
-        excludeUUIDs = excludeUUIDs,
-        limit = 1
-    })
-    if #results > 0 then
-        local petInfo = results[1]
-        if petInfo.mutation == "Normal" then
-            return petInfo.uuid
-        end
-    end
-    return nil
-end
+-- Mencari target (non-fav, tanpa Blossoming) - sudah tidak digunakan karena target pakai dropdown
+-- function SharkLogic.findTarget(...) -- tidak digunakan lagi
 
 function SharkLogic.equipPet(petsService, uuid, cframe)
     if not uuid then return end
