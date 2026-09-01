@@ -28,7 +28,7 @@ local state = {
     selectedSharkUUID = nil,
     targetName = "Moon Cat",
     tumbalNames = {"Dog"},
-    minLevel = 100,  -- default 100 (tumbal harus level >= 100)
+    minLevel = 100,   -- <-- TAMBAHKAN INI
     currentTumbalUUID = nil,
     currentTargetUUID = nil,
     cycleCount = 0,
@@ -66,14 +66,14 @@ end
 local function unequipSharkAndEquipTumbalTarget()
     if not state.selectedSharkUUID then return end
 
-    -- Panggil findTumbal dengan parameter minLevel
-    local tumbalUUID = SharkLogic.findTumbal(
+    -- <-- PERBAIKAN: tangkap dua nilai (pet object dan uuid)
+    local tumbalPet, tumbalUUID = SharkLogic.findTumbal(
         DataPetModule,
         state.tumbalNames,
         {state.selectedMimicUUID, state.selectedSharkUUID},
-        state.minLevel or 0
+        state.minLevel or 0   -- <-- kirim minLevel
     )
-    local targetUUID = SharkLogic.findTarget(
+    local targetPet, targetUUID = SharkLogic.findTarget(
         DataPetModule,
         state.targetName,
         {state.selectedMimicUUID, state.selectedSharkUUID}
@@ -204,7 +204,9 @@ local MimicDropdown = MainTab:CreateDropdown({
     MultipleOptions = false,
     Callback = function(option)
         local selectedLabel = option
-        if type(option) == "table" then selectedLabel = option[1] end
+        if type(option) == "table" then
+            selectedLabel = option[1]
+        end
         local uuid = mimicLabelToUUID[selectedLabel]
         if uuid then
             state.selectedMimicUUID = uuid
@@ -224,7 +226,9 @@ local SharkDropdown = MainTab:CreateDropdown({
     MultipleOptions = false,
     Callback = function(option)
         local selectedLabel = option
-        if type(option) == "table" then selectedLabel = option[1] end
+        if type(option) == "table" then
+            selectedLabel = option[1]
+        end
         local uuid = sharkLabelToUUID[selectedLabel]
         if uuid then
             state.selectedSharkUUID = uuid
@@ -236,7 +240,6 @@ local SharkDropdown = MainTab:CreateDropdown({
     end
 })
 
--- Refresh dropdowns
 local function refreshMimicDropdown()
     local hasil = getFavoritesByKeyword("Mimic")
     local options = {}
@@ -249,7 +252,9 @@ local function refreshMimicDropdown()
         table.insert(options, label)
         mimicLabelToUUID[label] = pet.uuid
     end
-    if #options == 0 then options = {"❌ Tidak ada Mimic favorit"} end
+    if #options == 0 then
+        options = {"❌ Tidak ada Mimic favorit"}
+    end
     MimicDropdown:Refresh(options)
 end
 
@@ -265,11 +270,12 @@ local function refreshSharkDropdown()
         table.insert(options, label)
         sharkLabelToUUID[label] = pet.uuid
     end
-    if #options == 0 then options = {"❌ Tidak ada Shark favorit"} end
+    if #options == 0 then
+        options = {"❌ Tidak ada Shark favorit"}
+    end
     SharkDropdown:Refresh(options)
 end
 
--- Tombol Refresh
 MainTab:CreateButton({
     Name = "🔄 Refresh Daftar Pet",
     Callback = function()
@@ -312,8 +318,8 @@ MainTab:CreateInput({
     end
 })
 
--- ===== [BARU] Slider Min Level Tumbal =====
-local MinLevelSlider = MainTab:CreateSlider({
+-- <-- TAMBAHKAN SLIDER MIN LEVEL
+MainTab:CreateSlider({
     Name = "Min Level Tumbal",
     Range = {0, 500},
     Increment = 1,
@@ -321,10 +327,9 @@ local MinLevelSlider = MainTab:CreateSlider({
     CurrentValue = state.minLevel,
     Callback = function(value)
         state.minLevel = value
-        print("✅ Min Level Tumbal diubah menjadi:", value)
+        print("[UI] Min Level Tumbal:", value)
     end
 })
--- ===========================================
 
 -- Toggle Start/Stop
 local StartToggle
