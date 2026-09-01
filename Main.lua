@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield GEN2 (Simple & Stable)
+-- Pria Solo HUB - Rayfield GEN2 (FINAL)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -18,7 +18,7 @@ if not DataPetModule or not SharkLogic or not Rayfield then
     return
 end
 
-print("✅ Semua modul berhasil dimuat")
+print("✅ Modul berhasil dimuat")
 
 -- ============================================================
 -- FUNGSI BANTUAN
@@ -606,7 +606,6 @@ local function loadConfig()
         state.pnpPickupDelay = decoded.pnpPickupDelay or 0.6
         state.pnpPlaceDelay = decoded.pnpPlaceDelay or 0
         print("✅ Konfigurasi dimuat dari " .. CONFIG_FILE)
-        -- refresh all UI setelah load
         updateAllUI()
     else
         warn("❌ Gagal memuat file.")
@@ -681,7 +680,8 @@ local SharkToggle, LevelingToggle, PnpToggle
 
 local function updateAllUI()
     if MimicDropdown then
-        MimicDropdown:SetOptions(getMimicOptions())
+        local opts = getMimicOptions()
+        MimicDropdown:Refresh(opts)
         if state.selectedMimicUUID then
             for label, uuid in pairs(_G._mimicMap or {}) do
                 if uuid == state.selectedMimicUUID then
@@ -693,7 +693,8 @@ local function updateAllUI()
     end
 
     if SharkDropdown then
-        SharkDropdown:SetOptions(getSharkOptions())
+        local opts = getSharkOptions()
+        SharkDropdown:Refresh(opts)
         if state.selectedSharkUUID then
             for label, uuid in pairs(_G._sharkMap or {}) do
                 if uuid == state.selectedSharkUUID then
@@ -705,7 +706,8 @@ local function updateAllUI()
     end
 
     if TargetDropdown then
-        TargetDropdown:SetOptions(getTargetOptions())
+        local opts = getTargetOptions()
+        TargetDropdown:Refresh(opts)
         if #state.targetQueue > 0 then
             local selectedLabels = {}
             for _, uuid in ipairs(state.targetQueue) do
@@ -723,7 +725,8 @@ local function updateAllUI()
     end
 
     if TimDropdown then
-        TimDropdown:SetOptions(getTimOptions())
+        local opts = getTimOptions()
+        TimDropdown:Refresh(opts)
         if #state.levelingTim > 0 then
             local selectedLabels = {}
             for _, uuid in ipairs(state.levelingTim) do
@@ -741,7 +744,8 @@ local function updateAllUI()
     end
 
     if TargetLevelDropdown then
-        TargetLevelDropdown:SetOptions(getTargetLevelOptions())
+        local opts = getTargetLevelOptions()
+        TargetLevelDropdown:Refresh(opts)
         if #state.levelingTargets > 0 then
             local selectedLabels = {}
             for _, uuid in ipairs(state.levelingTargets) do
@@ -759,7 +763,8 @@ local function updateAllUI()
     end
 
     if PnpDropdown then
-        PnpDropdown:SetOptions(getPnpOptions())
+        local opts = getPnpOptions()
+        PnpDropdown:Refresh(opts)
         if #state.pnpPets > 0 then
             local selectedLabels = {}
             for _, uuid in ipairs(state.pnpPets) do
@@ -793,7 +798,6 @@ end
 
 local sharkTab = Window:CreateTab({ name = "Auto Shark", icon = "shark" })
 
--- Filter input Mimic
 sharkTab:CreateInput({
     name = "🔍 Cari Mimic",
     placeholder = "Filter...",
@@ -801,8 +805,8 @@ sharkTab:CreateInput({
     flag = "mimicFilter",
     callback = function(Value)
         if MimicDropdown then
-            MimicDropdown:SetOptions(getMimicOptions(Value))
-            -- restore selected
+            local opts = getMimicOptions(Value)
+            MimicDropdown:Refresh(opts)
             if state.selectedMimicUUID then
                 for label, uuid in pairs(_G._mimicMap or {}) do
                     if uuid == state.selectedMimicUUID then
@@ -832,7 +836,6 @@ MimicDropdown = sharkTab:CreateDropdown({
     end
 })
 
--- Filter input Shark
 sharkTab:CreateInput({
     name = "🔍 Cari Shark",
     placeholder = "Filter...",
@@ -840,7 +843,8 @@ sharkTab:CreateInput({
     flag = "sharkFilter",
     callback = function(Value)
         if SharkDropdown then
-            SharkDropdown:SetOptions(getSharkOptions(Value))
+            local opts = getSharkOptions(Value)
+            SharkDropdown:Refresh(opts)
             if state.selectedSharkUUID then
                 for label, uuid in pairs(_G._sharkMap or {}) do
                     if uuid == state.selectedSharkUUID then
@@ -870,7 +874,6 @@ SharkDropdown = sharkTab:CreateDropdown({
     end
 })
 
--- Filter input Target
 sharkTab:CreateInput({
     name = "🔍 Cari Target",
     placeholder = "Filter...",
@@ -878,8 +881,8 @@ sharkTab:CreateInput({
     flag = "targetFilter",
     callback = function(Value)
         if TargetDropdown then
-            TargetDropdown:SetOptions(getTargetOptions(Value))
-            -- restore selected (multiple)
+            local opts = getTargetOptions(Value)
+            TargetDropdown:Refresh(opts)
             if #state.targetQueue > 0 then
                 local selectedLabels = {}
                 for _, uuid in ipairs(state.targetQueue) do
@@ -1020,7 +1023,8 @@ levelingTab:CreateInput({
     flag = "timFilter",
     callback = function(Value)
         if TimDropdown then
-            TimDropdown:SetOptions(getTimOptions(Value))
+            local opts = getTimOptions(Value)
+            TimDropdown:Refresh(opts)
             if #state.levelingTim > 0 then
                 local selectedLabels = {}
                 for _, uuid in ipairs(state.levelingTim) do
@@ -1072,7 +1076,8 @@ levelingTab:CreateInput({
     flag = "targetLevelFilter",
     callback = function(Value)
         if TargetLevelDropdown then
-            TargetLevelDropdown:SetOptions(getTargetLevelOptions(Value))
+            local opts = getTargetLevelOptions(Value)
+            TargetLevelDropdown:Refresh(opts)
             if #state.levelingTargets > 0 then
                 local selectedLabels = {}
                 for _, uuid in ipairs(state.levelingTargets) do
@@ -1174,7 +1179,8 @@ pnpTab:CreateInput({
     flag = "pnpFilter",
     callback = function(Value)
         if PnpDropdown then
-            PnpDropdown:SetOptions(getPnpOptions(Value))
+            local opts = getPnpOptions(Value)
+            PnpDropdown:Refresh(opts)
             if #state.pnpPets > 0 then
                 local selectedLabels = {}
                 for _, uuid in ipairs(state.pnpPets) do
@@ -1299,7 +1305,7 @@ settingsTab:CreateButton({
 })
 
 -- ============================================================
--- INISIALISASI AWAL
+-- INISIALISASI
 -- ============================================================
 
 updateAllUI()
