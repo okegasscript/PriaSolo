@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - FINAL
+-- Pria Solo HUB - FINAL (Skip target Blossoming)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -55,80 +55,6 @@ local function uniqueTable(t)
 end
 
 -- ============================================================
--- DATA SERVICE (untuk mengambil EquippedPets)
--- ============================================================
-
-local function getDataService()
-    local DataService = nil
-    local modules = ReplicatedStorage:FindFirstChild("Modules")
-    if modules then
-        DataService = modules:FindFirstChild("DataService")
-    end
-    if not DataService then
-        DataService = ReplicatedStorage:FindFirstChild("DataService")
-    end
-    if not DataService then
-        DataService = _G.DataService
-    end
-    return DataService
-end
-
-local function getEquippedPets()
-    local DataService = getDataService()
-    if not DataService then
-        warn("❌ DataService tidak ditemukan")
-        return {}
-    end
-    local success, DataServiceModule = pcall(require, DataService)
-    if not success then
-        warn("❌ Gagal require DataService:", DataServiceModule)
-        return {}
-    end
-    local data = DataServiceModule:GetData()
-    if not data then
-        warn("❌ DataService:GetData() nil")
-        return {}
-    end
-    local equipped = data.EquippedPets
-    if not equipped or type(equipped) ~= "table" then
-        if data.PetsData then
-            equipped = data.PetsData.EquippedPets
-        end
-    end
-    return equipped or {}
-end
-
--- ============================================================
--- FUNGSI UNEQUIP SEMUA (clearGarden)
--- ============================================================
-
-local function unequipAllGardenPets(timeout)
-    timeout = timeout or 0.5
-    if isUnequipping then return end
-    isUnequipping = true
-
-    local equipped = getEquippedPets()
-    if #equipped == 0 then
-        print("✅ Tidak ada pet yang perlu diunequip")
-        isUnequipping = false
-        return
-    end
-
-    equipped = uniqueTable(equipped)
-    print("🔄 Unequip " .. #equipped .. " pet (timeout " .. timeout .. "s)")
-    local startTime = os.clock()
-    for i, uuid in ipairs(equipped) do
-        if os.clock() - startTime > timeout then
-            print("⏹️ Unequip dihentikan (timeout) - sisa " .. (#equipped - i + 1) .. " pet")
-            break
-        end
-        SharkLogic.unequipPet(PetsService, uuid)
-        task.wait(0.05)
-    end
-    isUnequipping = false
-end
-
--- ============================================================
 -- STATE
 -- ============================================================
 
@@ -169,6 +95,50 @@ local PetsService = GameEvents:WaitForChild("PetsService")
 local NotificationEvent = GameEvents:WaitForChild("Notification")
 
 -- ============================================================
+-- FUNGSI UNEQUIP SEMUA (clearGarden)
+-- ============================================================
+
+local function unequipAllGardenPets(timeout)
+    timeout = timeout or 0.5
+    if isUnequipping then return end
+    isUnequipping = true
+
+    local data = DataPetModule.getAllPets()
+    if not data then
+        isUnequipping = false
+        return
+    end
+    local equipped = data.PetsData and data.PetsData.EquippedPets
+    if not equipped or type(equipped) ~= "table" then
+        isUnequipping = false
+        return
+    end
+
+    equipped = uniqueTable(equipped)
+    local toUnequip = {}
+    for _, uuid in ipairs(equipped) do
+        table.insert(toUnequip, uuid)
+    end
+
+    if #toUnequip > 0 then
+        print("🔄 Unequip " .. #toUnequip .. " pet (timeout " .. timeout .. "s)")
+        local startTime = os.clock()
+        for i, uuid in ipairs(toUnequip) do
+            if os.clock() - startTime > timeout then
+                print("⏹️ Unequip dihentikan (timeout) - sisa " .. (#toUnequip - i + 1) .. " pet")
+                break
+            end
+            SharkLogic.unequipPet(PetsService, uuid)
+            task.wait(0.05)
+        end
+    else
+        print("✅ Tidak ada pet yang perlu diunequip")
+    end
+
+    isUnequipping = false
+end
+
+-- ============================================================
 -- FUNGSI LOGIKA AUTO SHARK
 -- ============================================================
 
@@ -191,14 +161,50 @@ local function unequipTargetAndEquipShark()
     state.isProcessing = false
 end
 
-local function getNextTarget()
-    if #state.targetQueue == 0 then return nil end
-    local target = state.targetQueue[state.currentTargetIndex]
-    state.currentTargetIndex = state.currentTargetIndex + 1
-    if state.currentTargetIndex > #state.targetQueue then
-        state.currentTargetIndex = 1
-    end
-    return target
+local function getPetMutation(uuid)
+    local data = DataPetModule.getAllPets()
+    if not data then return nil
+    local inv = data.PetsData and data.PetsData.PetInventory and data.PetsData.PetInventory.Data
+    if not inv then return nil
+    local pet = inv[uuid]
+    if not pet or not pet.PetData then return nil
+    local raw = pet.PetData.MutationType or "Normal"
+    -- Terjemahkan mutasi (sederhana, pakai map lokal)
+    local map = {
+        ["@"] = "Blossoming",
+        ["J"] = "Oxpecker",
+        ["IN"] = "Inferno",
+        ["X"] = "Venom",
+        ["EM"] = "Ember",
+        ["EV"] = "Everchanted",
+        ["O"] = "Forger",
+        ["A"] = "Nightmare",
+        ["N"] = "Lion",
+        ["i"] = "Mega",
+        ["TS"] = "Transcendent",
+        ["Normal"] = "Normal",
+    }
+    return map[raw] or raw
+end
+
+local function getNextValidTarget()
+    if #state.targetQueue == 0 then return nil
+    local startIndex = state.currentTargetIndex
+    repeat
+        local target = state.targetQueue[state.currentTargetIndex]
+        state.currentTargetIndex = state.currentTargetIndex + 1
+        if state.currentTargetIndex > #state.targetQueue then
+            state.currentTargetIndex = 1
+        end
+        -- Cek mutasi target
+        local mut = getPetMutation(target)
+        if mut and mut ~= "Blossoming" then
+            return target
+        else
+            print("⚠️ Target sudah Blossoming, lewati.")
+        end
+    until state.currentTargetIndex == startIndex -- loop penuh
+    return nil
 end
 
 local function unequipSharkAndEquipTumbalTarget()
@@ -206,9 +212,9 @@ local function unequipSharkAndEquipTumbalTarget()
         print("⚠️ Shark belum dipilih")
         return
     end
-    local targetUUID = getNextTarget()
+    local targetUUID = getNextValidTarget()
     if not targetUUID then
-        print("⚠️ Tidak ada target tersedia")
+        print("⚠️ Tidak ada target tersedia (semua sudah Blossoming)")
         SharkLogic.equipPet(PetsService, state.selectedSharkUUID, SharkLogic.defaultConfig.slotCFrame)
         state.isProcessing = false
         return
@@ -326,7 +332,6 @@ local function startLeveling()
         return
     end
 
-    -- Bersihkan semua pet dulu
     unequipAllGardenPets(1.0)
     task.wait(0.2)
 
@@ -838,7 +843,7 @@ LevelingToggle = levelingTab:CreateToggle({
 })
 
 -- ============================================================
--- TAB 3: PNP
+-- TAB 3: PNP (tanpa clearGarden)
 -- ============================================================
 
 local pnpTab = Window:CreateTab({ name = "PNP", icon = "bolt" })
@@ -916,51 +921,6 @@ PnpToggle = pnpTab:CreateToggle({
             end
         end
         saveConfig()
-    end
-})
-
--- ============================================================
--- TAB 4: PENGATURAN
--- ============================================================
-
-local settingsTab = Window:CreateTab({ name = "Pengaturan", icon = "gear" })
-
-settingsTab:CreateButton({
-    name = "💾 Simpan Konfigurasi",
-    flag = "save",
-    callback = saveConfig
-})
-
-settingsTab:CreateButton({
-    name = "📂 Muat Konfigurasi",
-    flag = "load",
-    callback = loadConfig
-})
-
-settingsTab:CreateButton({
-    name = "🔄 Reset Semua",
-    flag = "reset",
-    callback = function()
-        state.selectedMimicUUID = nil
-        state.selectedSharkUUID = nil
-        state.targetQueue = {}
-        state.tumbalNames = {"Dog"}
-        state.minLevel = 100
-        state.levelingTim = {}
-        state.levelingTargets = {}
-        state.targetLevel = 100
-        state.pnpPets = {}
-        state.pnpPickupDelay = 0.6
-        state.pnpPlaceDelay = 0
-        state.isSharkActive = false
-        state.isLevelingActive = false
-        state.pnpActive = false
-        if SharkToggle then SharkToggle:SetValue(false) end
-        if LevelingToggle then LevelingToggle:SetValue(false) end
-        if PnpToggle then PnpToggle:SetValue(false) end
-        updateAllUI()
-        unequipAllGardenPets(1.0)
-        print("🔄 Semua reset dan garden dibersihkan")
     end
 })
 
