@@ -3,7 +3,7 @@ local SharkLogic = {}
 SharkLogic.defaultConfig = {
     targetName = "Moon Cat",
     tumbalNames = {"Dog"},
-    slotCFrame = CFrame.new(-13.018989562988, 0, -74.922821044922, 1,0,0,0,1,0,0,0,1)
+    slotCFrame = CFrame.new(-16.000007629395, 4, -116.50244903564, 1, 0, 0, 0, 1, 0, 0, 0, 1)
 }
 
 -- Mencari tumbal dengan syarat:
