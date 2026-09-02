@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - FINAL (cleanGarden bersihkan semua)
+-- Pria Solo HUB - FINAL
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -95,7 +95,7 @@ local PetsService = GameEvents:WaitForChild("PetsService")
 local NotificationEvent = GameEvents:WaitForChild("Notification")
 
 -- ============================================================
--- FUNGSI UNEQUIP (clearGarden - bersihkan semua)
+-- FUNGSI UNEQUIP SEMUA (clearGarden)
 -- ============================================================
 
 local function unequipAllGardenPets(timeout)
@@ -115,21 +115,24 @@ local function unequipAllGardenPets(timeout)
     end
 
     equipped = uniqueTable(equipped)
-    if #equipped == 0 then
-        print("✅ Tidak ada pet yang perlu diunequip")
-        isUnequipping = false
-        return
+    local toUnequip = {}
+    for _, uuid in ipairs(equipped) do
+        table.insert(toUnequip, uuid)
     end
 
-    print("🔄 Unequip " .. #equipped .. " pet (timeout " .. timeout .. "s)")
-    local startTime = os.clock()
-    for i, uuid in ipairs(equipped) do
-        if os.clock() - startTime > timeout then
-            print("⏹️ Unequip dihentikan (timeout) - sisa " .. (#equipped - i + 1) .. " pet")
-            break
+    if #toUnequip > 0 then
+        print("🔄 Unequip " .. #toUnequip .. " pet (timeout " .. timeout .. "s)")
+        local startTime = os.clock()
+        for i, uuid in ipairs(toUnequip) do
+            if os.clock() - startTime > timeout then
+                print("⏹️ Unequip dihentikan (timeout) - sisa " .. (#toUnequip - i + 1) .. " pet")
+                break
+            end
+            SharkLogic.unequipPet(PetsService, uuid)
+            task.wait(0.05)
         end
-        SharkLogic.unequipPet(PetsService, uuid)
-        task.wait(0.05)
+    else
+        print("✅ Tidak ada pet yang perlu diunequip")
     end
 
     isUnequipping = false
@@ -206,7 +209,7 @@ local function unequipSharkAndEquipTumbalTarget()
 end
 
 -- ============================================================
--- FUNGSI LOGIKA AUTO LEVELING
+-- FUNGSI LOGIKA AUTO LEVELING & PNP
 -- ============================================================
 
 local function getPetLevel(uuid)
@@ -293,7 +296,7 @@ local function startLeveling()
         return
     end
 
-    -- Bersihkan semua pet
+    -- Bersihkan semua pet dulu
     unequipAllGardenPets(1.0)
     task.wait(0.2)
 
@@ -321,14 +324,9 @@ local function stopLeveling()
         task.wait(0.05)
     end
 
-    -- Bersihkan semua pet
     unequipAllGardenPets(1.0)
     print("⏹️ Auto Leveling dihentikan, semua pet diunequip.")
 end
-
--- ============================================================
--- FUNGSI PNP (tanpa clearGarden)
--- ============================================================
 
 local function pnpProcessPet(uuid)
     if state.pnpProcessing[uuid] then return end
@@ -678,7 +676,7 @@ SharkToggle = sharkTab:CreateToggle({
         state.isSharkActive = v
         if v then
             print("▶️ Shark ON")
-            -- Bersihkan semua pet
+            -- Bersihkan semua pet dulu
             unequipAllGardenPets(1.0)
             task.wait(0.2)
             if state.selectedMimicUUID then
@@ -693,7 +691,6 @@ SharkToggle = sharkTab:CreateToggle({
             print("⏹️ Shark OFF")
             state.isSharkActive = false
             unequipTargetAndEquipShark()
-            -- Bersihkan semua pet
             unequipAllGardenPets(1.0)
         end
         saveConfig()
@@ -890,6 +887,51 @@ PnpToggle = pnpTab:CreateToggle({
             end
         end
         saveConfig()
+    end
+})
+
+-- ============================================================
+-- TAB 4: PENGATURAN (opsional)
+-- ============================================================
+
+local settingsTab = Window:CreateTab({ name = "Pengaturan", icon = "gear" })
+
+settingsTab:CreateButton({
+    name = "💾 Simpan Konfigurasi",
+    flag = "save",
+    callback = saveConfig
+})
+
+settingsTab:CreateButton({
+    name = "📂 Muat Konfigurasi",
+    flag = "load",
+    callback = loadConfig
+})
+
+settingsTab:CreateButton({
+    name = "🔄 Reset Semua",
+    flag = "reset",
+    callback = function()
+        state.selectedMimicUUID = nil
+        state.selectedSharkUUID = nil
+        state.targetQueue = {}
+        state.tumbalNames = {"Dog"}
+        state.minLevel = 100
+        state.levelingTim = {}
+        state.levelingTargets = {}
+        state.targetLevel = 100
+        state.pnpPets = {}
+        state.pnpPickupDelay = 0.6
+        state.pnpPlaceDelay = 0
+        state.isSharkActive = false
+        state.isLevelingActive = false
+        state.pnpActive = false
+        if SharkToggle then SharkToggle:SetValue(false) end
+        if LevelingToggle then LevelingToggle:SetValue(false) end
+        if PnpToggle then PnpToggle:SetValue(false) end
+        updateAllUI()
+        unequipAllGardenPets(1.0)
+        print("🔄 Semua reset dan garden dibersihkan")
     end
 })
 
