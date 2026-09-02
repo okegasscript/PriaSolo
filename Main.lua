@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield GEN2 (Final, Dropdown Full Info)
+-- Pria Solo HUB - Rayfield GEN2 (Final, Format Rapi)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -27,6 +27,7 @@ print("✅ SharkLogic berhasil dimuat")
 -- FUNGSI BANTUAN
 -- ============================================================
 
+-- Format pet label: "Blossoming Black Bunny | 1.23 KG | Lv.100"
 local function formatPetLabel(pet)
     local mut = pet.mutation or "Normal"
     local name = pet.name or "Unknown"
@@ -37,7 +38,7 @@ local function formatPetLabel(pet)
         weight = baseWeight + (level - 1) * 0.5599
     end
     local level = pet.level or 1
-    return string.format("%s %s %.2f KG Lv.%d", mut, name, weight, level)
+    return string.format("%s %s | %.2f KG | Lv.%d", mut, name, weight, level)
 end
 
 local function sortAlphabetically(a, b)
@@ -414,7 +415,7 @@ NotificationEvent.OnClientEvent:Connect(function(message)
 end)
 
 -- ============================================================
--- FUNGSI UNTUK MENGAMBIL DATA DROPDOWN (format lengkap)
+-- FUNGSI UNTUK MENGAMBIL DATA DROPDOWN (format rapi)
 -- ============================================================
 
 local function getOptionsFor(type, filter)
@@ -441,7 +442,7 @@ local function getOptionsFor(type, filter)
     local options = {}
     local map = {}
     for _, pet in ipairs(hasil) do
-        local label = formatPetLabel(pet)  -- full info: mutasi, nama, berat, level
+        local label = formatPetLabel(pet)  -- format: "Mutasi Nama | Berat KG | Lv.Level"
         if string.lower(label):find(string.lower(filter)) then
             if map[label] then
                 label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
@@ -592,7 +593,7 @@ MimicDropdown = sharkTab:CreateDropdown({
         local uuid = map[val]
         if uuid then
             state.selectedMimicUUID = uuid
-            print("✅ Mimic:", val, "UUID:", uuid)
+            print("✅ Mimic:", val)
             saveConfig()
         end
     end
@@ -623,7 +624,7 @@ SharkDropdown = sharkTab:CreateDropdown({
         local uuid = map[val]
         if uuid then
             state.selectedSharkUUID = uuid
-            print("✅ Shark:", val, "UUID:", uuid)
+            print("✅ Shark:", val)
             saveConfig()
         end
     end
@@ -724,7 +725,7 @@ SharkToggle = sharkTab:CreateToggle({
 })
 
 -- ============================================================
--- TAB 2: AUTO LEVELING (Target Level pakai Input, bukan Slider)
+-- TAB 2: AUTO LEVELING (Target Level pakai Input)
 -- ============================================================
 
 local levelingTab = Window:CreateTab({ name = "Auto Leveling", icon = "rocket" })
@@ -797,7 +798,6 @@ TargetLevelDropdown = levelingTab:CreateDropdown({
     end
 })
 
--- Ganti slider dengan input untuk Target Level
 TargetLevelInput = levelingTab:CreateInput({
     name = "Target Level",
     placeholder = "1-500",
