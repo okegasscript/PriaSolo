@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield GEN2 (Final, tanpa SetValue error)
+-- Pria Solo HUB - Rayfield GEN2 (Final, tanpa SetValue)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -509,7 +509,6 @@ local function loadConfig()
         state.pnpPickupDelay = decoded.pnpPickupDelay or 0.6
         state.pnpPlaceDelay = decoded.pnpPlaceDelay or 0
         print("✅ State dimuat dari " .. CONFIG_FILE)
-        -- Refresh UI setelah load
         updateAllUI()
     else
         warn("❌ Gagal memuat state.")
@@ -538,7 +537,7 @@ local SharkToggle, LevelingToggle, PnpToggle
 local TumbalInput, MinLevelSlider, TargetLevelSlider
 
 -- ============================================================
--- UPDATE UI (hanya refresh options dropdown, tidak set value input/slider)
+-- UPDATE UI (hanya refresh options dropdown, tidak set value)
 -- ============================================================
 
 local function updateAllUI()
@@ -560,7 +559,6 @@ local function updateAllUI()
     if PnpDropdown then
         PnpDropdown:Refresh(getOptionsFor("pnp"))
     end
-    -- Tidak set value untuk input/slider di sini untuk menghindari error
 end
 
 -- ============================================================
@@ -821,13 +819,27 @@ LevelingToggle = levelingTab:CreateToggle({
         if v then
             if state.isSharkActive then
                 print("⚠️ Auto Shark sedang aktif! Matikan dulu.")
-                LevelingToggle:SetValue(false)
+                -- tidak ada SetValue di sini, biarkan toggle tetap ON atau OFF sesuai logika
+                -- tapi kita harus set toggle kembali ke false jika error
+                -- cara: kita set state.isLevelingActive = false dan return
+                state.isLevelingActive = false
+                -- kita tidak bisa set toggle manual, biarkan flag yang handle
+                return
+            end
+            if #state.levelingTim == 0 then
+                print("⚠️ Pilih Tim Leveling dulu!")
+                state.isLevelingActive = false
+                return
+            end
+            if #state.levelingTargets == 0 then
+                print("⚠️ Pilih Target Leveling dulu!")
+                state.isLevelingActive = false
                 return
             end
             startLeveling()
         else
             stopLeveling()
-            LevelingToggle:SetValue(false)
+            state.isLevelingActive = false
         end
         saveConfig()
     end
