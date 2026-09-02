@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - FINAL (Format Dropdown Pendek)
+-- Pria Solo HUB - FINAL (Clear Garden on Start/Stop)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -8,23 +8,21 @@ local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 local CONFIG_FILE = "PriaSolo.json"
 
--- Load Rayfield GEN2
+-- Load modul
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2"))()
 if not Rayfield then warn("❌ Gagal memuat Rayfield") return end
 print("✅ Rayfield berhasil dimuat")
 
--- Load DataPetModule
 local DataPetModule = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua"))()
 if not DataPetModule then warn("❌ Gagal memuat DataPetModule") return end
 print("✅ DataPetModule berhasil dimuat")
 
--- Load SharkLogic
 local SharkLogic = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/SharkLogic.lua"))()
 if not SharkLogic then warn("❌ Gagal memuat SharkLogic") return end
 print("✅ SharkLogic berhasil dimuat")
 
 -- ============================================================
--- FUNGSI BANTUAN (format paling pendek)
+-- FUNGSI BANTUAN
 -- ============================================================
 
 local function formatPetLabel(pet)
@@ -37,7 +35,6 @@ local function formatPetLabel(pet)
         weight = baseWeight + (level - 1) * 0.5599
     end
     local level = pet.level or 1
-    -- Format pendek: "Blossoming Black Bunny | 1.23KG | Lv100"
     return string.format("%s %s | %.2fKG | Lv%d", mut, name, weight, level)
 end
 
@@ -98,10 +95,10 @@ local PetsService = GameEvents:WaitForChild("PetsService")
 local NotificationEvent = GameEvents:WaitForChild("Notification")
 
 -- ============================================================
--- FUNGSI UNEQUIP SELEKTIF
+-- FUNGSI UNEQUIP ALL GARDEN
 -- ============================================================
 
-local function unequipAllGardenPets(keepUUIDs, timeout)
+local function clearGarden(keepUUIDs, timeout)
     timeout = timeout or 0.5
     if isUnequipping then return end
     isUnequipping = true
@@ -307,7 +304,8 @@ local function startLeveling()
         return
     end
 
-    unequipAllGardenPets(state.levelingTim, 1.0)
+    -- Clear garden sebelum equip tim
+    clearGarden(state.levelingTim, 1.0)
     task.wait(0.2)
 
     equipLevelingTim()
@@ -334,7 +332,7 @@ local function stopLeveling()
         task.wait(0.05)
     end
 
-    unequipAllGardenPets({}, 1.0)
+    clearGarden({}, 1.0)
     print("⏹️ Auto Leveling dihentikan, semua pet diunequip.")
 end
 
@@ -442,7 +440,7 @@ local function getOptionsFor(type, filter)
     local options = {}
     local map = {}
     for _, pet in ipairs(hasil) do
-        local label = formatPetLabel(pet)  -- pendek
+        local label = formatPetLabel(pet)
         if string.lower(label):find(string.lower(filter)) then
             if map[label] then
                 label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
@@ -687,7 +685,7 @@ SharkToggle = sharkTab:CreateToggle({
         state.isSharkActive = v
         if v then
             print("▶️ Shark ON")
-            unequipAllGardenPets({state.selectedMimicUUID, state.selectedSharkUUID}, 1.0)
+            clearGarden({state.selectedMimicUUID, state.selectedSharkUUID}, 1.0)
             task.wait(0.2)
             if state.selectedMimicUUID then
                 SharkLogic.equipPet(PetsService, state.selectedMimicUUID, SharkLogic.defaultConfig.slotCFrame)
@@ -701,7 +699,7 @@ SharkToggle = sharkTab:CreateToggle({
             print("⏹️ Shark OFF")
             state.isSharkActive = false
             unequipTargetAndEquipShark()
-            unequipAllGardenPets({}, 1.0)
+            clearGarden({}, 1.0)
         end
         saveConfig()
     end
