@@ -1,12 +1,11 @@
 -- ============================================================
--- Pria Solo HUB - FINAL (Auto-load setelah UI siap)
+-- Pria Solo HUB - Rayfield GEN2 (Dengan Flag System)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
-local CONFIG_FILE = "PriaSolo.json"
 
 -- Load Rayfield GEN2
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2"))()
@@ -360,7 +359,6 @@ end
 local isHandlingCooldownEvent = false
 
 PetCooldownsEvent.OnClientEvent:Connect(function(petId, dataArray)
-    -- PNP
     if state.pnpActive and petId and state.pnpPets and type(state.pnpPets) == "table" then
         for _, uuid in ipairs(state.pnpPets) do
             if petId == uuid then
@@ -379,7 +377,6 @@ PetCooldownsEvent.OnClientEvent:Connect(function(petId, dataArray)
         end
     end
 
-    -- Auto Shark
     if state.isSharkActive and petId == state.selectedMimicUUID and not isHandlingCooldownEvent then
         local time = nil
         for _, entry in ipairs(dataArray) do
@@ -460,75 +457,14 @@ local function getOptionsFor(type, filter)
 end
 
 -- ============================================================
--- SAVE / LOAD (dengan flag untuk menghindari update UI saat load awal)
--- ============================================================
-
-local function saveConfig()
-    local config = {
-        selectedMimicUUID = state.selectedMimicUUID,
-        selectedSharkUUID = state.selectedSharkUUID,
-        targetQueue = state.targetQueue,
-        tumbalNames = state.tumbalNames,
-        minLevel = state.minLevel,
-        levelingTim = state.levelingTim,
-        levelingTargets = state.levelingTargets,
-        targetLevel = state.targetLevel,
-        pnpPets = state.pnpPets,
-        pnpPickupDelay = state.pnpPickupDelay,
-        pnpPlaceDelay = state.pnpPlaceDelay,
-        timestamp = os.time()
-    }
-    local json = HttpService:JSONEncode(config)
-    local success, err = pcall(function()
-        writefile(CONFIG_FILE, json)
-    end)
-    if success then
-        print("✅ Konfigurasi disimpan ke " .. CONFIG_FILE)
-    else
-        warn("❌ Gagal menyimpan: " .. tostring(err))
-    end
-end
-
-local function loadConfig()
-    local success, data = pcall(function()
-        return readfile(CONFIG_FILE)
-    end)
-    if not success then
-        print("ℹ️ File konfigurasi tidak ditemukan, gunakan default.")
-        return
-    end
-    local decoded = HttpService:JSONDecode(data)
-    if decoded then
-        state.selectedMimicUUID = decoded.selectedMimicUUID
-        state.selectedSharkUUID = decoded.selectedSharkUUID
-        state.targetQueue = decoded.targetQueue or {}
-        state.tumbalNames = decoded.tumbalNames or {"Dog"}
-        state.minLevel = decoded.minLevel or 100
-        state.levelingTim = decoded.levelingTim or {}
-        state.levelingTargets = decoded.levelingTargets or {}
-        state.targetLevel = decoded.targetLevel or 100
-        state.pnpPets = decoded.pnpPets or {}
-        state.pnpPickupDelay = decoded.pnpPickupDelay or 0.6
-        state.pnpPlaceDelay = decoded.pnpPlaceDelay or 0
-        print("✅ Konfigurasi dimuat dari " .. CONFIG_FILE)
-        -- Update UI hanya jika dropdown sudah dibuat
-        if typeof(updateAllUI) == "function" then
-            updateAllUI()
-        end
-    else
-        warn("❌ Gagal memuat file.")
-    end
-end
-
--- ============================================================
--- UI (RAYFIELD GEN2)
+-- UI (RAYFIELD GEN2) dengan Flag System
 -- ============================================================
 
 local Window = Rayfield:CreateWindow({
     name = "Pria Solo HUB",
     configuration = {
-        autoSave = false,
-        autoLoad = false,
+        autoSave = true,   -- Aktifkan auto save
+        autoLoad = true,   -- Aktifkan auto load
         fileName = "Settings",
         customFolder = "PriaSolo",
     },
@@ -542,10 +478,11 @@ local SharkToggle, LevelingToggle, PnpToggle
 local TumbalInput, MinLevelSlider, TargetLevelSlider
 
 -- ============================================================
--- UPDATE UI (didefinisikan setelah dropdown dibuat)
+-- UPDATE UI (membaca dari flag atau state)
 -- ============================================================
 
 local function updateAllUI()
+    -- Untuk dropdown, kita refresh options dan set value dari state
     if MimicDropdown then
         local opts, map = getOptionsFor("mimic")
         MimicDropdown:Refresh(opts)
@@ -1069,21 +1006,35 @@ PnpToggle = pnpTab:CreateToggle({
 })
 
 -- ============================================================
--- TAB 4: PENGATURAN
+-- TAB 4: PENGATURAN (dengan tombol save/load manual jika diperlukan)
 -- ============================================================
 
 local settingsTab = Window:CreateTab({ name = "Pengaturan", icon = "gear" })
 
 settingsTab:CreateButton({
-    name = "💾 Simpan Konfigurasi",
+    name = "💾 Simpan Konfigurasi (Manual)",
     flag = "save",
-    callback = saveConfig
+    callback = function()
+        Window:Save()  -- Simpan semua flag ke file
+        print("✅ Konfigurasi disimpan")
+    end
 })
 
 settingsTab:CreateButton({
-    name = "📂 Muat Konfigurasi",
+    name = "📂 Muat Konfigurasi (Manual)",
     flag = "load",
-    callback = loadConfig
+    callback = function()
+        Window:Load()  -- Muat semua flag dari file
+        print("✅ Konfigurasi dimuat")
+        -- Sinkronkan state dari flag
+        state.isSharkActive = Window.Flags.sharkToggle or false
+        state.isLevelingActive = Window.Flags.levelingToggle or false
+        state.pnpActive = Window.Flags.pnpToggle or false
+        state.minLevel = Window.Flags.minLevelSlider or 100
+        state.targetLevel = Window.Flags.targetLevelSlider or 100
+        -- Untuk dropdown value, kita perlu ekstrak dari flag (opsional, karena auto load akan set value)
+        updateAllUI()
+    end
 })
 
 settingsTab:CreateButton({
@@ -1107,16 +1058,22 @@ settingsTab:CreateButton({
         if SharkToggle then SharkToggle:SetValue(false) end
         if LevelingToggle then LevelingToggle:SetValue(false) end
         if PnpToggle then PnpToggle:SetValue(false) end
+        if TumbalInput then TumbalInput:SetValue("Dog") end
+        if MinLevelSlider then MinLevelSlider:SetValue(100) end
+        if TargetLevelSlider then TargetLevelSlider:SetValue(100) end
         updateAllUI()
-        print("🔄 Semua reset")
+        Window:Save()  -- Simpan setelah reset
+        print("🔄 Semua reset dan disimpan")
     end
 })
 
 -- ============================================================
--- LOAD KONFIGURASI SETELAH UI SIAP
+-- INISIALISASI AKHIR
 -- ============================================================
 
-loadConfig()
+-- Update UI pertama kali, lalu load konfigurasi otomatis (autoLoad sudah aktif)
 updateAllUI()
+-- Auto load akan terjadi otomatis karena autoLoad=true, tapi kita panggil sekali untuk memastikan
+Window:Load()
 
-print("✅ Pria Solo HUB siap. Tekan K untuk membuka UI.")
+print("✅ Pria Solo HUB siap (dengan Flag System). Tekan K untuk membuka UI.")
