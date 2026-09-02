@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - FINAL (DataService langsung untuk EquippedPets)
+-- Pria Solo HUB - FINAL (Stabil, tidak error nil)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -9,31 +9,47 @@ local player = Players.LocalPlayer
 local CONFIG_FILE = "PriaSolo.json"
 
 -- ============================================================
--- LOAD MODUL
+-- LOAD MODUL DENGAN PCALL
 -- ============================================================
 
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2"))()
-if not Rayfield then warn("❌ Gagal memuat Rayfield") return end
+local function loadModule(url)
+    local success, result = pcall(function()
+        return loadstring(game:HttpGet(url))()
+    end)
+    if not success then
+        warn("❌ Gagal memuat module dari " .. url)
+        return nil
+    end
+    return result
+end
+
+local Rayfield = loadModule("https://sirius.menu/gen2")
+if not Rayfield then return end
 print("✅ Rayfield berhasil dimuat")
 
-local DataPetModule = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua"))()
-if not DataPetModule then warn("❌ Gagal memuat DataPetModule") return end
+local DataPetModule = loadModule("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua")
+if not DataPetModule then return end
 print("✅ DataPetModule berhasil dimuat")
 
-local SharkLogic = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/SharkLogic.lua"))()
-if not SharkLogic then warn("❌ Gagal memuat SharkLogic") return end
+local SharkLogic = loadModule("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/SharkLogic.lua")
+if not SharkLogic then return end
 print("✅ SharkLogic berhasil dimuat")
 
 -- ============================================================
 -- FUNGSI AKSES DATA LANGSUNG (untuk EquippedPets)
 -- ============================================================
 
-local function getEquippedPets()
+local function getDataService()
     local DataService = nil
     local modules = ReplicatedStorage:FindFirstChild("Modules")
     if modules then DataService = modules:FindFirstChild("DataService") end
     if not DataService then DataService = ReplicatedStorage:FindFirstChild("DataService") end
     if not DataService then DataService = _G.DataService end
+    return DataService
+end
+
+local function getEquippedPets()
+    local DataService = getDataService()
     if not DataService then
         warn("❌ DataService tidak ditemukan")
         return {}
@@ -88,18 +104,6 @@ end
 
 local function sortAlphabetically(a, b)
     return string.lower(a) < string.lower(b)
-end
-
-local function uniqueTable(t)
-    local seen = {}
-    local result = {}
-    for _, v in ipairs(t) do
-        if not seen[v] then
-            seen[v] = true
-            table.insert(result, v)
-        end
-    end
-    return result
 end
 
 -- ============================================================
