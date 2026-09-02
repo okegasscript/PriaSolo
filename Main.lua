@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield GEN2 (Fix SetValue)
+-- Pria Solo HUB - Rayfield GEN2 (Tanpa SetValue, Auto-Save Flag)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -458,7 +458,7 @@ local function getOptionsFor(type, filter)
 end
 
 -- ============================================================
--- SAVE / LOAD STATE
+-- SAVE / LOAD STATE (untuk UUID, queue, dll)
 -- ============================================================
 
 local function saveConfig()
@@ -481,7 +481,7 @@ local function saveConfig()
         writefile(CONFIG_FILE, json)
     end)
     if success then
-        print("✅ State disimpan ke " .. CONFIG_FILE)
+        print("✅ Konfigurasi state disimpan ke " .. CONFIG_FILE)
     else
         warn("❌ Gagal menyimpan state: " .. tostring(err))
     end
@@ -536,116 +536,44 @@ local SharkToggle, LevelingToggle, PnpToggle
 local TumbalInput, MinLevelSlider, TargetLevelSlider
 
 -- ============================================================
--- UPDATE UI (dipanggil setelah UI siap)
+-- UPDATE UI (hanya refresh options, tidak set value)
 -- ============================================================
 
 local function updateAllUI()
     if MimicDropdown then
-        local opts, map = getOptionsFor("mimic")
+        local opts = getOptionsFor("mimic")
         MimicDropdown:Refresh(opts)
-        if state.selectedMimicUUID then
-            for label, uuid in pairs(map) do
-                if uuid == state.selectedMimicUUID then
-                    MimicDropdown:SetValue(label)
-                    break
-                end
-            end
-        end
-        _G._mimicMap = map
+        _G._mimicMap = opts
     end
 
     if SharkDropdown then
-        local opts, map = getOptionsFor("shark")
+        local opts = getOptionsFor("shark")
         SharkDropdown:Refresh(opts)
-        if state.selectedSharkUUID then
-            for label, uuid in pairs(map) do
-                if uuid == state.selectedSharkUUID then
-                    SharkDropdown:SetValue(label)
-                    break
-                end
-            end
-        end
-        _G._sharkMap = map
+        _G._sharkMap = opts
     end
 
     if TargetDropdown then
-        local opts, map = getOptionsFor("target")
+        local opts = getOptionsFor("target")
         TargetDropdown:Refresh(opts)
-        if #state.targetQueue > 0 then
-            local selectedLabels = {}
-            for _, uuid in ipairs(state.targetQueue) do
-                for label, u in pairs(map) do
-                    if u == uuid then
-                        table.insert(selectedLabels, label)
-                        break
-                    end
-                end
-            end
-            if #selectedLabels > 0 then
-                TargetDropdown:SetValue(selectedLabels)
-            end
-        end
-        _G._targetMap = map
+        _G._targetMap = opts
     end
 
     if TimDropdown then
-        local opts, map = getOptionsFor("tim")
+        local opts = getOptionsFor("tim")
         TimDropdown:Refresh(opts)
-        if #state.levelingTim > 0 then
-            local selectedLabels = {}
-            for _, uuid in ipairs(state.levelingTim) do
-                for label, u in pairs(map) do
-                    if u == uuid then
-                        table.insert(selectedLabels, label)
-                        break
-                    end
-                end
-            end
-            if #selectedLabels > 0 then
-                TimDropdown:SetValue(selectedLabels)
-            end
-        end
-        _G._timMap = map
+        _G._timMap = opts
     end
 
     if TargetLevelDropdown then
-        local opts, map = getOptionsFor("targetlevel")
+        local opts = getOptionsFor("targetlevel")
         TargetLevelDropdown:Refresh(opts)
-        if #state.levelingTargets > 0 then
-            local selectedLabels = {}
-            for _, uuid in ipairs(state.levelingTargets) do
-                for label, u in pairs(map) do
-                    if u == uuid then
-                        table.insert(selectedLabels, label)
-                        break
-                    end
-                end
-            end
-            if #selectedLabels > 0 then
-                TargetLevelDropdown:SetValue(selectedLabels)
-            end
-        end
-        _G._targetLevelMap = map
+        _G._targetLevelMap = opts
     end
 
     if PnpDropdown then
-        local opts, map = getOptionsFor("pnp")
+        local opts = getOptionsFor("pnp")
         PnpDropdown:Refresh(opts)
-        if #state.pnpPets > 0 then
-            local selectedLabels = {}
-            for _, uuid in ipairs(state.pnpPets) do
-                for label, u in pairs(map) do
-                    if u == uuid then
-                        table.insert(selectedLabels, label)
-                        break
-                    end
-                end
-            end
-            if #selectedLabels > 0 then
-                PnpDropdown:SetValue(selectedLabels)
-            end
-        end
-        _G._pnpMap = map
+        _G._pnpMap = opts
     end
 
     if TumbalInput then
@@ -674,14 +602,6 @@ sharkTab:CreateInput({
         if MimicDropdown then
             local opts, map = getOptionsFor("mimic", v)
             MimicDropdown:Refresh(opts)
-            if state.selectedMimicUUID then
-                for label, uuid in pairs(map) do
-                    if uuid == state.selectedMimicUUID then
-                        MimicDropdown:SetValue(label)
-                        break
-                    end
-                end
-            end
             _G._mimicMap = map
         end
     end
@@ -713,14 +633,6 @@ sharkTab:CreateInput({
         if SharkDropdown then
             local opts, map = getOptionsFor("shark", v)
             SharkDropdown:Refresh(opts)
-            if state.selectedSharkUUID then
-                for label, uuid in pairs(map) do
-                    if uuid == state.selectedSharkUUID then
-                        SharkDropdown:SetValue(label)
-                        break
-                    end
-                end
-            end
             _G._sharkMap = map
         end
     end
@@ -752,20 +664,6 @@ sharkTab:CreateInput({
         if TargetDropdown then
             local opts, map = getOptionsFor("target", v)
             TargetDropdown:Refresh(opts)
-            if #state.targetQueue > 0 then
-                local selectedLabels = {}
-                for _, uuid in ipairs(state.targetQueue) do
-                    for label, u in pairs(map) do
-                        if u == uuid then
-                            table.insert(selectedLabels, label)
-                            break
-                        end
-                    end
-                end
-                if #selectedLabels > 0 then
-                    TargetDropdown:SetValue(selectedLabels)
-                end
-            end
             _G._targetMap = map
         end
     end
@@ -866,20 +764,6 @@ levelingTab:CreateInput({
         if TimDropdown then
             local opts, map = getOptionsFor("tim", v)
             TimDropdown:Refresh(opts)
-            if #state.levelingTim > 0 then
-                local selectedLabels = {}
-                for _, uuid in ipairs(state.levelingTim) do
-                    for label, u in pairs(map) do
-                        if u == uuid then
-                            table.insert(selectedLabels, label)
-                            break
-                        end
-                    end
-                end
-                if #selectedLabels > 0 then
-                    TimDropdown:SetValue(selectedLabels)
-                end
-            end
             _G._timMap = map
         end
     end
@@ -916,20 +800,6 @@ levelingTab:CreateInput({
         if TargetLevelDropdown then
             local opts, map = getOptionsFor("targetlevel", v)
             TargetLevelDropdown:Refresh(opts)
-            if #state.levelingTargets > 0 then
-                local selectedLabels = {}
-                for _, uuid in ipairs(state.levelingTargets) do
-                    for label, u in pairs(map) do
-                        if u == uuid then
-                            table.insert(selectedLabels, label)
-                            break
-                        end
-                    end
-                end
-                if #selectedLabels > 0 then
-                    TargetLevelDropdown:SetValue(selectedLabels)
-                end
-            end
             _G._targetLevelMap = map
         end
     end
@@ -1002,20 +872,6 @@ pnpTab:CreateInput({
         if PnpDropdown then
             local opts, map = getOptionsFor("pnp", v)
             PnpDropdown:Refresh(opts)
-            if #state.pnpPets > 0 then
-                local selectedLabels = {}
-                for _, uuid in ipairs(state.pnpPets) do
-                    for label, u in pairs(map) do
-                        if u == uuid then
-                            table.insert(selectedLabels, label)
-                            break
-                        end
-                    end
-                end
-                if #selectedLabels > 0 then
-                    PnpDropdown:SetValue(selectedLabels)
-                end
-            end
             _G._pnpMap = map
         end
     end
@@ -1077,13 +933,10 @@ PnpToggle = pnpTab:CreateToggle({
 })
 
 -- ============================================================
--- INISIALISASI AKHIR (LOAD STATE SETELAH UI SIAP)
+-- INISIALISASI AKHIR
 -- ============================================================
 
--- Load state dari file (UUID, queue, dll)
 loadConfig()
-
--- Update UI dengan state yang sudah dimuat (pastikan semua dropdown sudah ada)
 updateAllUI()
 
 print("✅ Pria Solo HUB siap. Tekan K untuk membuka UI.")
