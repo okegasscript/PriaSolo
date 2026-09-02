@@ -55,6 +55,80 @@ local function uniqueTable(t)
 end
 
 -- ============================================================
+-- DATA SERVICE (untuk mengambil EquippedPets)
+-- ============================================================
+
+local function getDataService()
+    local DataService = nil
+    local modules = ReplicatedStorage:FindFirstChild("Modules")
+    if modules then
+        DataService = modules:FindFirstChild("DataService")
+    end
+    if not DataService then
+        DataService = ReplicatedStorage:FindFirstChild("DataService")
+    end
+    if not DataService then
+        DataService = _G.DataService
+    end
+    return DataService
+end
+
+local function getEquippedPets()
+    local DataService = getDataService()
+    if not DataService then
+        warn("❌ DataService tidak ditemukan")
+        return {}
+    end
+    local success, DataServiceModule = pcall(require, DataService)
+    if not success then
+        warn("❌ Gagal require DataService:", DataServiceModule)
+        return {}
+    end
+    local data = DataServiceModule:GetData()
+    if not data then
+        warn("❌ DataService:GetData() nil")
+        return {}
+    end
+    local equipped = data.EquippedPets
+    if not equipped or type(equipped) ~= "table" then
+        if data.PetsData then
+            equipped = data.PetsData.EquippedPets
+        end
+    end
+    return equipped or {}
+end
+
+-- ============================================================
+-- FUNGSI UNEQUIP SEMUA (clearGarden)
+-- ============================================================
+
+local function unequipAllGardenPets(timeout)
+    timeout = timeout or 0.5
+    if isUnequipping then return end
+    isUnequipping = true
+
+    local equipped = getEquippedPets()
+    if #equipped == 0 then
+        print("✅ Tidak ada pet yang perlu diunequip")
+        isUnequipping = false
+        return
+    end
+
+    equipped = uniqueTable(equipped)
+    print("🔄 Unequip " .. #equipped .. " pet (timeout " .. timeout .. "s)")
+    local startTime = os.clock()
+    for i, uuid in ipairs(equipped) do
+        if os.clock() - startTime > timeout then
+            print("⏹️ Unequip dihentikan (timeout) - sisa " .. (#equipped - i + 1) .. " pet")
+            break
+        end
+        SharkLogic.unequipPet(PetsService, uuid)
+        task.wait(0.05)
+    end
+    isUnequipping = false
+end
+
+-- ============================================================
 -- STATE
 -- ============================================================
 
@@ -93,50 +167,6 @@ local GameEvents = ReplicatedStorage:WaitForChild("GameEvents")
 local PetCooldownsEvent = GameEvents:WaitForChild("PetCooldownsUpdated")
 local PetsService = GameEvents:WaitForChild("PetsService")
 local NotificationEvent = GameEvents:WaitForChild("Notification")
-
--- ============================================================
--- FUNGSI UNEQUIP SEMUA (clearGarden)
--- ============================================================
-
-local function unequipAllGardenPets(timeout)
-    timeout = timeout or 0.5
-    if isUnequipping then return end
-    isUnequipping = true
-
-    local data = DataPetModule.getAllPets()
-    if not data then
-        isUnequipping = false
-        return
-    end
-    local equipped = data.PetsData and data.PetsData.EquippedPets
-    if not equipped or type(equipped) ~= "table" then
-        isUnequipping = false
-        return
-    end
-
-    equipped = uniqueTable(equipped)
-    local toUnequip = {}
-    for _, uuid in ipairs(equipped) do
-        table.insert(toUnequip, uuid)
-    end
-
-    if #toUnequip > 0 then
-        print("🔄 Unequip " .. #toUnequip .. " pet (timeout " .. timeout .. "s)")
-        local startTime = os.clock()
-        for i, uuid in ipairs(toUnequip) do
-            if os.clock() - startTime > timeout then
-                print("⏹️ Unequip dihentikan (timeout) - sisa " .. (#toUnequip - i + 1) .. " pet")
-                break
-            end
-            SharkLogic.unequipPet(PetsService, uuid)
-            task.wait(0.05)
-        end
-    else
-        print("✅ Tidak ada pet yang perlu diunequip")
-    end
-
-    isUnequipping = false
-end
 
 -- ============================================================
 -- FUNGSI LOGIKA AUTO SHARK
@@ -676,7 +706,6 @@ SharkToggle = sharkTab:CreateToggle({
         state.isSharkActive = v
         if v then
             print("▶️ Shark ON")
-            -- Bersihkan semua pet dulu
             unequipAllGardenPets(1.0)
             task.wait(0.2)
             if state.selectedMimicUUID then
@@ -809,7 +838,7 @@ LevelingToggle = levelingTab:CreateToggle({
 })
 
 -- ============================================================
--- TAB 3: PNP (tanpa clearGarden)
+-- TAB 3: PNP
 -- ============================================================
 
 local pnpTab = Window:CreateTab({ name = "PNP", icon = "bolt" })
@@ -891,7 +920,7 @@ PnpToggle = pnpTab:CreateToggle({
 })
 
 -- ============================================================
--- TAB 4: PENGATURAN (opsional)
+-- TAB 4: PENGATURAN
 -- ============================================================
 
 local settingsTab = Window:CreateTab({ name = "Pengaturan", icon = "gear" })
