@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Final (Target dropdown tanpa filter type)
+-- Pria Solo HUB - FINAL (cleanGarden bersihkan semua)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -8,17 +8,15 @@ local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 local CONFIG_FILE = "PriaSolo.json"
 
--- Load Rayfield GEN2
+-- Load modul
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2"))()
 if not Rayfield then warn("❌ Gagal memuat Rayfield") return end
 print("✅ Rayfield berhasil dimuat")
 
--- Load DataPetModule
 local DataPetModule = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua"))()
 if not DataPetModule then warn("❌ Gagal memuat DataPetModule") return end
 print("✅ DataPetModule berhasil dimuat")
 
--- Load SharkLogic
 local SharkLogic = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/SharkLogic.lua"))()
 if not SharkLogic then warn("❌ Gagal memuat SharkLogic") return end
 print("✅ SharkLogic berhasil dimuat")
@@ -97,19 +95,13 @@ local PetsService = GameEvents:WaitForChild("PetsService")
 local NotificationEvent = GameEvents:WaitForChild("Notification")
 
 -- ============================================================
--- FUNGSI UNEQUIP SELEKTIF
+-- FUNGSI UNEQUIP (clearGarden - bersihkan semua)
 -- ============================================================
 
-local function unequipAllGardenPets(keepUUIDs, timeout)
+local function unequipAllGardenPets(timeout)
     timeout = timeout or 0.5
     if isUnequipping then return end
     isUnequipping = true
-
-    keepUUIDs = keepUUIDs or {}
-    local keepMap = {}
-    for _, uuid in ipairs(keepUUIDs) do
-        keepMap[uuid] = true
-    end
 
     local data = DataPetModule.getAllPets()
     if not data then
@@ -123,26 +115,21 @@ local function unequipAllGardenPets(keepUUIDs, timeout)
     end
 
     equipped = uniqueTable(equipped)
-    local toUnequip = {}
-    for _, uuid in ipairs(equipped) do
-        if not keepMap[uuid] then
-            table.insert(toUnequip, uuid)
-        end
+    if #equipped == 0 then
+        print("✅ Tidak ada pet yang perlu diunequip")
+        isUnequipping = false
+        return
     end
 
-    if #toUnequip > 0 then
-        print("🔄 Unequip " .. #toUnequip .. " pet (timeout " .. timeout .. "s)")
-        local startTime = os.clock()
-        for i, uuid in ipairs(toUnequip) do
-            if os.clock() - startTime > timeout then
-                print("⏹️ Unequip dihentikan (timeout) - sisa " .. (#toUnequip - i + 1) .. " pet")
-                break
-            end
-            SharkLogic.unequipPet(PetsService, uuid)
-            task.wait(0.05)
+    print("🔄 Unequip " .. #equipped .. " pet (timeout " .. timeout .. "s)")
+    local startTime = os.clock()
+    for i, uuid in ipairs(equipped) do
+        if os.clock() - startTime > timeout then
+            print("⏹️ Unequip dihentikan (timeout) - sisa " .. (#equipped - i + 1) .. " pet")
+            break
         end
-    else
-        print("✅ Tidak ada pet yang perlu diunequip")
+        SharkLogic.unequipPet(PetsService, uuid)
+        task.wait(0.05)
     end
 
     isUnequipping = false
@@ -219,7 +206,7 @@ local function unequipSharkAndEquipTumbalTarget()
 end
 
 -- ============================================================
--- FUNGSI LOGIKA AUTO LEVELING & PNP
+-- FUNGSI LOGIKA AUTO LEVELING
 -- ============================================================
 
 local function getPetLevel(uuid)
@@ -306,7 +293,8 @@ local function startLeveling()
         return
     end
 
-    unequipAllGardenPets(state.levelingTim, 1.0)
+    -- Bersihkan semua pet
+    unequipAllGardenPets(1.0)
     task.wait(0.2)
 
     equipLevelingTim()
@@ -333,9 +321,14 @@ local function stopLeveling()
         task.wait(0.05)
     end
 
-    unequipAllGardenPets({}, 1.0)
+    -- Bersihkan semua pet
+    unequipAllGardenPets(1.0)
     print("⏹️ Auto Leveling dihentikan, semua pet diunequip.")
 end
+
+-- ============================================================
+-- FUNGSI PNP (tanpa clearGarden)
+-- ============================================================
 
 local function pnpProcessPet(uuid)
     if state.pnpProcessing[uuid] then return end
@@ -425,7 +418,6 @@ local function getOptionsFor(type, filter)
     elseif type == "shark" then
         hasil = DataPetModule.findPets({ name = "Shark", isFavorite = true })
     elseif type == "target" then
-        -- PERBAIKAN: hapus filter type, tampilkan semua pet dengan isFavorite=false dan mutation=Normal
         hasil = DataPetModule.findPets({
             isFavorite = false,
             mutation = "Normal",
@@ -686,7 +678,8 @@ SharkToggle = sharkTab:CreateToggle({
         state.isSharkActive = v
         if v then
             print("▶️ Shark ON")
-            unequipAllGardenPets({state.selectedMimicUUID, state.selectedSharkUUID}, 1.0)
+            -- Bersihkan semua pet
+            unequipAllGardenPets(1.0)
             task.wait(0.2)
             if state.selectedMimicUUID then
                 SharkLogic.equipPet(PetsService, state.selectedMimicUUID, SharkLogic.defaultConfig.slotCFrame)
@@ -700,7 +693,8 @@ SharkToggle = sharkTab:CreateToggle({
             print("⏹️ Shark OFF")
             state.isSharkActive = false
             unequipTargetAndEquipShark()
-            unequipAllGardenPets({}, 1.0)
+            -- Bersihkan semua pet
+            unequipAllGardenPets(1.0)
         end
         saveConfig()
     end
@@ -818,7 +812,7 @@ LevelingToggle = levelingTab:CreateToggle({
 })
 
 -- ============================================================
--- TAB 3: PNP
+-- TAB 3: PNP (tanpa clearGarden)
 -- ============================================================
 
 local pnpTab = Window:CreateTab({ name = "PNP", icon = "bolt" })
@@ -887,7 +881,14 @@ PnpToggle = pnpTab:CreateToggle({
     flag = "pnpToggle",
     callback = function(v)
         state.pnpActive = v
-        print(v and "▶️ PNP ON" or "⏹️ PNP OFF")
+        if v then
+            print("▶️ PNP ON")
+        else
+            print("⏹️ PNP OFF")
+            for uuid, _ in pairs(state.pnpProcessing) do
+                state.pnpProcessing[uuid] = false
+            end
+        end
         saveConfig()
     end
 })
