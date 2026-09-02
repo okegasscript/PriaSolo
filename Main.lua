@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield GEN2 (Final, Target Level via Input)
+-- Pria Solo HUB - Rayfield GEN2 (Final, Dropdown Full Info)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -414,7 +414,7 @@ NotificationEvent.OnClientEvent:Connect(function(message)
 end)
 
 -- ============================================================
--- FUNGSI UNTUK MENGAMBIL DATA DROPDOWN
+-- FUNGSI UNTUK MENGAMBIL DATA DROPDOWN (format lengkap)
 -- ============================================================
 
 local function getOptionsFor(type, filter)
@@ -441,7 +441,7 @@ local function getOptionsFor(type, filter)
     local options = {}
     local map = {}
     for _, pet in ipairs(hasil) do
-        local label = formatPetLabel(pet)
+        local label = formatPetLabel(pet)  -- full info: mutasi, nama, berat, level
         if string.lower(label):find(string.lower(filter)) then
             if map[label] then
                 label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
@@ -458,7 +458,7 @@ local function getOptionsFor(type, filter)
 end
 
 -- ============================================================
--- SAVE / LOAD STATE (gunakan writefile/readfile)
+-- SAVE / LOAD STATE
 -- ============================================================
 
 local function saveConfig()
@@ -537,7 +537,7 @@ local SharkToggle, LevelingToggle, PnpToggle
 local TumbalInput, MinLevelSlider, TargetLevelInput
 
 -- ============================================================
--- UPDATE UI (hanya refresh options dropdown, tidak set value)
+-- UPDATE UI (hanya refresh options dropdown)
 -- ============================================================
 
 local function updateAllUI()
@@ -724,7 +724,7 @@ SharkToggle = sharkTab:CreateToggle({
 })
 
 -- ============================================================
--- TAB 2: AUTO LEVELING (Target Level via Input)
+-- TAB 2: AUTO LEVELING (Target Level pakai Input, bukan Slider)
 -- ============================================================
 
 local levelingTab = Window:CreateTab({ name = "Auto Leveling", icon = "rocket" })
@@ -797,23 +797,21 @@ TargetLevelDropdown = levelingTab:CreateDropdown({
     end
 })
 
--- Target Level sebagai Input (bukan slider)
+-- Ganti slider dengan input untuk Target Level
 TargetLevelInput = levelingTab:CreateInput({
-    name = "Target Level (1-500)",
-    placeholder = "100",
+    name = "Target Level",
+    placeholder = "1-500",
     value = tostring(state.targetLevel),
     flag = "targetLevelInput",
     callback = function(v)
         local num = tonumber(v)
-        if num then
-            num = math.floor(num)
-            if num < 1 then num = 1 end
-            if num > 500 then num = 500 end
+        if num and num >= 1 and num <= 500 then
             state.targetLevel = num
             print("🎯 Target Level:", num)
             saveConfig()
         else
-            print("⚠️ Masukkan angka valid (1-500)")
+            print("⚠️ Target Level harus angka 1-500")
+            TargetLevelInput:SetValue(tostring(state.targetLevel))
         end
     end
 })
