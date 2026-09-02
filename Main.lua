@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield GEN2 (Final, Slider Leveling 1-500)
+-- Pria Solo HUB - Rayfield GEN2 (Final, Target Level via Input)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -534,7 +534,7 @@ local Window = Rayfield:CreateWindow({
 local MimicDropdown, SharkDropdown, TargetDropdown
 local TimDropdown, TargetLevelDropdown, PnpDropdown
 local SharkToggle, LevelingToggle, PnpToggle
-local TumbalInput, MinLevelSlider, TargetLevelSlider
+local TumbalInput, MinLevelSlider, TargetLevelInput
 
 -- ============================================================
 -- UPDATE UI (hanya refresh options dropdown, tidak set value)
@@ -724,7 +724,7 @@ SharkToggle = sharkTab:CreateToggle({
 })
 
 -- ============================================================
--- TAB 2: AUTO LEVELING (max level 500, min 1)
+-- TAB 2: AUTO LEVELING (Target Level via Input)
 -- ============================================================
 
 local levelingTab = Window:CreateTab({ name = "Auto Leveling", icon = "rocket" })
@@ -797,18 +797,24 @@ TargetLevelDropdown = levelingTab:CreateDropdown({
     end
 })
 
--- PERBAIKAN: Target Level slider dengan min=1, max=500
-TargetLevelSlider = levelingTab:CreateSlider({
-    name = "Target Level",
-    min = 1,
-    max = 500,
-    increment = 1,
-    value = state.targetLevel,
-    flag = "targetLevelSlider",
+-- Target Level sebagai Input (bukan slider)
+TargetLevelInput = levelingTab:CreateInput({
+    name = "Target Level (1-500)",
+    placeholder = "100",
+    value = tostring(state.targetLevel),
+    flag = "targetLevelInput",
     callback = function(v)
-        state.targetLevel = v
-        print("🎯 Target Level:", v)
-        saveConfig()
+        local num = tonumber(v)
+        if num then
+            num = math.floor(num)
+            if num < 1 then num = 1 end
+            if num > 500 then num = 500 end
+            state.targetLevel = num
+            print("🎯 Target Level:", num)
+            saveConfig()
+        else
+            print("⚠️ Masukkan angka valid (1-500)")
+        end
     end
 })
 
