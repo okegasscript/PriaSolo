@@ -1,11 +1,12 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield GEN2 (Dengan Flag System)
+-- Pria Solo HUB - Rayfield GEN2 (dengan auto-save/load bawaan)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
+local CONFIG_FILE = "PriaSolo.json"
 
 -- Load Rayfield GEN2
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2"))()
@@ -457,14 +458,71 @@ local function getOptionsFor(type, filter)
 end
 
 -- ============================================================
--- UI (RAYFIELD GEN2) dengan Flag System
+-- SAVE / LOAD STATE (manual untuk data kompleks)
+-- ============================================================
+
+local function saveConfig()
+    local config = {
+        selectedMimicUUID = state.selectedMimicUUID,
+        selectedSharkUUID = state.selectedSharkUUID,
+        targetQueue = state.targetQueue,
+        tumbalNames = state.tumbalNames,
+        minLevel = state.minLevel,
+        levelingTim = state.levelingTim,
+        levelingTargets = state.levelingTargets,
+        targetLevel = state.targetLevel,
+        pnpPets = state.pnpPets,
+        pnpPickupDelay = state.pnpPickupDelay,
+        pnpPlaceDelay = state.pnpPlaceDelay,
+        timestamp = os.time()
+    }
+    local json = HttpService:JSONEncode(config)
+    local success, err = pcall(function()
+        writefile(CONFIG_FILE, json)
+    end)
+    if success then
+        print("✅ Konfigurasi state disimpan ke " .. CONFIG_FILE)
+    else
+        warn("❌ Gagal menyimpan state: " .. tostring(err))
+    end
+end
+
+local function loadConfig()
+    local success, data = pcall(function()
+        return readfile(CONFIG_FILE)
+    end)
+    if not success then
+        print("ℹ️ File state tidak ditemukan, gunakan default.")
+        return
+    end
+    local decoded = HttpService:JSONDecode(data)
+    if decoded then
+        state.selectedMimicUUID = decoded.selectedMimicUUID
+        state.selectedSharkUUID = decoded.selectedSharkUUID
+        state.targetQueue = decoded.targetQueue or {}
+        state.tumbalNames = decoded.tumbalNames or {"Dog"}
+        state.minLevel = decoded.minLevel or 100
+        state.levelingTim = decoded.levelingTim or {}
+        state.levelingTargets = decoded.levelingTargets or {}
+        state.targetLevel = decoded.targetLevel or 100
+        state.pnpPets = decoded.pnpPets or {}
+        state.pnpPickupDelay = decoded.pnpPickupDelay or 0.6
+        state.pnpPlaceDelay = decoded.pnpPlaceDelay or 0
+        print("✅ State dimuat dari " .. CONFIG_FILE)
+    else
+        warn("❌ Gagal memuat state.")
+    end
+end
+
+-- ============================================================
+-- UI (RAYFIELD GEN2)
 -- ============================================================
 
 local Window = Rayfield:CreateWindow({
     name = "Pria Solo HUB",
     configuration = {
-        autoSave = true,   -- Aktifkan auto save
-        autoLoad = true,   -- Aktifkan auto load
+        autoSave = true,   -- otomatis simpan flag UI (dropdown value, toggle, slider)
+        autoLoad = true,   -- otomatis muat flag UI saat startup
         fileName = "Settings",
         customFolder = "PriaSolo",
     },
@@ -478,11 +536,10 @@ local SharkToggle, LevelingToggle, PnpToggle
 local TumbalInput, MinLevelSlider, TargetLevelSlider
 
 -- ============================================================
--- UPDATE UI (membaca dari flag atau state)
+-- UPDATE UI (untuk mengisi dropdown options dan restore state)
 -- ============================================================
 
 local function updateAllUI()
-    -- Untuk dropdown, kita refresh options dan set value dari state
     if MimicDropdown then
         local opts, map = getOptionsFor("mimic")
         MimicDropdown:Refresh(opts)
@@ -642,6 +699,7 @@ MimicDropdown = sharkTab:CreateDropdown({
         if uuid then
             state.selectedMimicUUID = uuid
             print("✅ Mimic:", val, "UUID:", uuid)
+            saveConfig() -- simpan state
         end
     end
 })
@@ -680,6 +738,7 @@ SharkDropdown = sharkTab:CreateDropdown({
         if uuid then
             state.selectedSharkUUID = uuid
             print("✅ Shark:", val, "UUID:", uuid)
+            saveConfig()
         end
     end
 })
@@ -727,6 +786,7 @@ TargetDropdown = sharkTab:CreateDropdown({
         end
         state.currentTargetIndex = 1
         print("✅ Target dipilih:", #state.targetQueue)
+        saveConfig()
     end
 })
 
@@ -744,6 +804,7 @@ TumbalInput = sharkTab:CreateInput({
         if #names > 0 then
             state.tumbalNames = names
             print("✅ Tumbal:", table.concat(names, ", "))
+            saveConfig()
         end
     end
 })
@@ -758,6 +819,7 @@ MinLevelSlider = sharkTab:CreateSlider({
     callback = function(v)
         state.minLevel = v
         print("📊 Min Level:", v)
+        saveConfig()
     end
 })
 
@@ -785,6 +847,7 @@ SharkToggle = sharkTab:CreateToggle({
             unequipTargetAndEquipShark()
             unequipAllGardenPets({}, 1.0)
         end
+        saveConfig()
     end
 })
 
@@ -840,6 +903,7 @@ TimDropdown = levelingTab:CreateDropdown({
             table.move(state.levelingTim, 1, 7, 1, {})
         end
         print("✅ Tim Leveling:", #state.levelingTim)
+        saveConfig()
     end
 })
 
@@ -885,6 +949,7 @@ TargetLevelDropdown = levelingTab:CreateDropdown({
             if uuid then table.insert(state.levelingTargets, uuid) end
         end
         print("✅ Target Leveling:", #state.levelingTargets)
+        saveConfig()
     end
 })
 
@@ -898,6 +963,7 @@ TargetLevelSlider = levelingTab:CreateSlider({
     callback = function(v)
         state.targetLevel = v
         print("🎯 Target Level:", v)
+        saveConfig()
     end
 })
 
@@ -917,6 +983,7 @@ LevelingToggle = levelingTab:CreateToggle({
             stopLeveling()
             LevelingToggle:SetValue(false)
         end
+        saveConfig()
     end
 })
 
@@ -968,6 +1035,7 @@ PnpDropdown = pnpTab:CreateDropdown({
             if uuid then table.insert(state.pnpPets, uuid) end
         end
         print("✅ PNP Pets:", #state.pnpPets)
+        saveConfig()
     end
 })
 
@@ -980,6 +1048,7 @@ pnpTab:CreateInput({
         local num = tonumber(v)
         if num and num >= 0 then state.pnpPickupDelay = num end
         print("📦 Pickup Delay:", state.pnpPickupDelay)
+        saveConfig()
     end
 })
 
@@ -992,6 +1061,7 @@ pnpTab:CreateInput({
         local num = tonumber(v)
         if num and num >= 0 then state.pnpPlaceDelay = num end
         print("📦 Place Delay:", state.pnpPlaceDelay)
+        saveConfig()
     end
 })
 
@@ -1002,68 +1072,7 @@ PnpToggle = pnpTab:CreateToggle({
     callback = function(v)
         state.pnpActive = v
         print(v and "▶️ PNP ON" or "⏹️ PNP OFF")
-    end
-})
-
--- ============================================================
--- TAB 4: PENGATURAN (dengan tombol save/load manual jika diperlukan)
--- ============================================================
-
-local settingsTab = Window:CreateTab({ name = "Pengaturan", icon = "gear" })
-
-settingsTab:CreateButton({
-    name = "💾 Simpan Konfigurasi (Manual)",
-    flag = "save",
-    callback = function()
-        Window:Save()  -- Simpan semua flag ke file
-        print("✅ Konfigurasi disimpan")
-    end
-})
-
-settingsTab:CreateButton({
-    name = "📂 Muat Konfigurasi (Manual)",
-    flag = "load",
-    callback = function()
-        Window:Load()  -- Muat semua flag dari file
-        print("✅ Konfigurasi dimuat")
-        -- Sinkronkan state dari flag
-        state.isSharkActive = Window.Flags.sharkToggle or false
-        state.isLevelingActive = Window.Flags.levelingToggle or false
-        state.pnpActive = Window.Flags.pnpToggle or false
-        state.minLevel = Window.Flags.minLevelSlider or 100
-        state.targetLevel = Window.Flags.targetLevelSlider or 100
-        -- Untuk dropdown value, kita perlu ekstrak dari flag (opsional, karena auto load akan set value)
-        updateAllUI()
-    end
-})
-
-settingsTab:CreateButton({
-    name = "🔄 Reset Semua",
-    flag = "reset",
-    callback = function()
-        state.selectedMimicUUID = nil
-        state.selectedSharkUUID = nil
-        state.targetQueue = {}
-        state.tumbalNames = {"Dog"}
-        state.minLevel = 100
-        state.levelingTim = {}
-        state.levelingTargets = {}
-        state.targetLevel = 100
-        state.pnpPets = {}
-        state.pnpPickupDelay = 0.6
-        state.pnpPlaceDelay = 0
-        state.isSharkActive = false
-        state.isLevelingActive = false
-        state.pnpActive = false
-        if SharkToggle then SharkToggle:SetValue(false) end
-        if LevelingToggle then LevelingToggle:SetValue(false) end
-        if PnpToggle then PnpToggle:SetValue(false) end
-        if TumbalInput then TumbalInput:SetValue("Dog") end
-        if MinLevelSlider then MinLevelSlider:SetValue(100) end
-        if TargetLevelSlider then TargetLevelSlider:SetValue(100) end
-        updateAllUI()
-        Window:Save()  -- Simpan setelah reset
-        print("🔄 Semua reset dan disimpan")
+        saveConfig()
     end
 })
 
@@ -1071,9 +1080,10 @@ settingsTab:CreateButton({
 -- INISIALISASI AKHIR
 -- ============================================================
 
--- Update UI pertama kali, lalu load konfigurasi otomatis (autoLoad sudah aktif)
-updateAllUI()
--- Auto load akan terjadi otomatis karena autoLoad=true, tapi kita panggil sekali untuk memastikan
-Window:Load()
+-- Load state dari file (UUID, queue, dll)
+loadConfig()
 
-print("✅ Pria Solo HUB siap (dengan Flag System). Tekan K untuk membuka UI.")
+-- Update UI dengan state yang sudah dimuat
+updateAllUI()
+
+print("✅ Pria Solo HUB siap. Tekan K untuk membuka UI.")
