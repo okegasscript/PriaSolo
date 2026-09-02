@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield GEN2 (Dengan Error Handling)
+-- Pria Solo HUB - FINAL (Auto-load setelah UI siap)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -8,50 +8,20 @@ local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
 local CONFIG_FILE = "PriaSolo.json"
 
--- ============================================================
--- LOAD MODUL DENGAN ERROR HANDLING
--- ============================================================
-
-local function loadModule(url)
-    local success, result = pcall(function()
-        return game:HttpGet(url)
-    end)
-    if not success then
-        warn("❌ Gagal mendownload module dari:", url)
-        return nil
-    end
-    local fn, err = loadstring(result)
-    if not fn then
-        warn("❌ Gagal compile module:", err)
-        return nil
-    end
-    local module, err2 = pcall(fn)
-    if not module then
-        warn("❌ Gagal execute module:", err2)
-        return nil
-    end
-    return module
-end
+-- Load Rayfield GEN2
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2"))()
+if not Rayfield then warn("❌ Gagal memuat Rayfield") return end
+print("✅ Rayfield berhasil dimuat")
 
 -- Load DataPetModule
-local DataPetModule = loadModule("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua")
-if not DataPetModule then
-    error("❌ Gagal memuat DataPetModule")
-end
+local DataPetModule = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/DataPetModule.lua"))()
+if not DataPetModule then warn("❌ Gagal memuat DataPetModule") return end
+print("✅ DataPetModule berhasil dimuat")
 
 -- Load SharkLogic
-local SharkLogic = loadModule("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/SharkLogic.lua")
-if not SharkLogic then
-    error("❌ Gagal memuat SharkLogic")
-end
-
--- Load Rayfield
-local Rayfield = loadModule("https://sirius.menu/gen2")
-if not Rayfield then
-    error("❌ Gagal memuat Rayfield")
-end
-
-print("✅ Semua modul berhasil dimuat")
+local SharkLogic = loadstring(game:HttpGet("https://raw.githubusercontent.com/okegasscript/PriaSolo/refs/heads/main/SharkLogic.lua"))()
+if not SharkLogic then warn("❌ Gagal memuat SharkLogic") return end
+print("✅ SharkLogic berhasil dimuat")
 
 -- ============================================================
 -- FUNGSI BANTUAN
@@ -87,32 +57,30 @@ local function uniqueTable(t)
 end
 
 -- ============================================================
--- STATE GLOBAL
+-- STATE
 -- ============================================================
 
 local state = {
-    isSharkActive = false,
-    isProcessing = false,
     selectedMimicUUID = nil,
     selectedSharkUUID = nil,
     targetQueue = {},
     currentTargetIndex = 1,
     tumbalNames = {"Dog"},
     minLevel = 100,
+    isSharkActive = false,
+    isProcessing = false,
     currentTumbalUUID = nil,
     currentTargetUUID = nil,
     cycleCount = 0,
     lastActionTime = 0,
-    isLevelingActive = false,
     levelingTim = {},
     levelingTargets = {},
     targetLevel = 100,
-    currentLevelingTargetIndex = 1,
-    currentLevelingTargetUUID = nil,
-    pnpActive = false,
+    isLevelingActive = false,
     pnpPets = {},
     pnpPickupDelay = 0.6,
     pnpPlaceDelay = 0,
+    pnpActive = false,
     pnpProcessing = {},
 }
 
@@ -133,7 +101,7 @@ local NotificationEvent = GameEvents:WaitForChild("Notification")
 -- ============================================================
 
 local function unequipAllGardenPets(keepUUIDs, timeout)
-    timeout = timeout or 1.0
+    timeout = timeout or 0.5
     if isUnequipping then return end
     isUnequipping = true
 
@@ -155,7 +123,6 @@ local function unequipAllGardenPets(keepUUIDs, timeout)
     end
 
     equipped = uniqueTable(equipped)
-
     local toUnequip = {}
     for _, uuid in ipairs(equipped) do
         if not keepMap[uuid] then
@@ -252,7 +219,7 @@ local function unequipSharkAndEquipTumbalTarget()
 end
 
 -- ============================================================
--- FUNGSI LOGIKA AUTO LEVELING
+-- FUNGSI LOGIKA AUTO LEVELING & PNP
 -- ============================================================
 
 local function getPetLevel(uuid)
@@ -370,10 +337,6 @@ local function stopLeveling()
     print("⏹️ Auto Leveling dihentikan, semua pet diunequip.")
 end
 
--- ============================================================
--- FUNGSI LOGIKA PNP
--- ============================================================
-
 local function pnpProcessPet(uuid)
     if state.pnpProcessing[uuid] then return end
     state.pnpProcessing[uuid] = true
@@ -456,139 +419,48 @@ end)
 -- FUNGSI UNTUK MENGAMBIL DATA DROPDOWN
 -- ============================================================
 
-local function getMimicOptions(filterText)
-    filterText = filterText or ""
-    local hasil = DataPetModule.findPets({ name = "Mimic", isFavorite = true })
+local function getOptionsFor(type, filter)
+    filter = filter or ""
+    local hasil = {}
+    if type == "mimic" then
+        hasil = DataPetModule.findPets({ name = "Mimic", isFavorite = true })
+    elseif type == "shark" then
+        hasil = DataPetModule.findPets({ name = "Shark", isFavorite = true })
+    elseif type == "target" then
+        hasil = DataPetModule.findPets({
+            type = "Mimic Octopus",
+            isFavorite = false,
+            mutation = "Normal",
+            excludeUUIDs = {state.selectedMimicUUID, state.selectedSharkUUID}
+        })
+    elseif type == "tim" then
+        hasil = DataPetModule.findPets({ isFavorite = true })
+    elseif type == "targetlevel" then
+        hasil = DataPetModule.findPets({ isFavorite = false })
+    elseif type == "pnp" then
+        hasil = DataPetModule.findPets({ isFavorite = true })
+    end
     local options = {}
-    local labelToUUID = {}
+    local map = {}
     for _, pet in ipairs(hasil) do
         local label = formatPetLabel(pet)
-        if string.lower(label):find(string.lower(filterText)) then
-            if labelToUUID[label] then
+        if string.lower(label):find(string.lower(filter)) then
+            if map[label] then
                 label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
             end
             table.insert(options, label)
-            labelToUUID[label] = pet.uuid
+            map[label] = pet.uuid
         end
     end
     table.sort(options, sortAlphabetically)
-    if #options == 0 then options = {"❌ Tidak ada Mimic favorit"}
-    _G._mimicMap = labelToUUID
-    return options
-end
-
-local function getSharkOptions(filterText)
-    filterText = filterText or ""
-    local hasil = DataPetModule.findPets({ name = "Shark", isFavorite = true })
-    local options = {}
-    local labelToUUID = {}
-    for _, pet in ipairs(hasil) do
-        local label = formatPetLabel(pet)
-        if string.lower(label):find(string.lower(filterText)) then
-            if labelToUUID[label] then
-                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
-            end
-            table.insert(options, label)
-            labelToUUID[label] = pet.uuid
-        end
+    if #options == 0 then
+        options = {"❌ Tidak ada data"}
     end
-    table.sort(options, sortAlphabetically)
-    if #options == 0 then options = {"❌ Tidak ada Shark favorit"}
-    _G._sharkMap = labelToUUID
-    return options
-end
-
-local function getTargetOptions(filterText)
-    filterText = filterText or ""
-    local hasil = DataPetModule.findPets({
-        type = "Mimic Octopus",
-        isFavorite = false,
-        mutation = "Normal",
-        excludeUUIDs = {state.selectedMimicUUID, state.selectedSharkUUID}
-    })
-    local options = {}
-    local labelToUUID = {}
-    for _, pet in ipairs(hasil) do
-        local label = formatPetLabel(pet)
-        if string.lower(label):find(string.lower(filterText)) then
-            if labelToUUID[label] then
-                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
-            end
-            table.insert(options, label)
-            labelToUUID[label] = pet.uuid
-        end
-    end
-    table.sort(options, sortAlphabetically)
-    if #options == 0 then options = {"❌ Tidak ada target"}
-    _G._targetMap = labelToUUID
-    return options
-end
-
-local function getTimOptions(filterText)
-    filterText = filterText or ""
-    local hasil = DataPetModule.findPets({ isFavorite = true })
-    local options = {}
-    local labelToUUID = {}
-    for _, pet in ipairs(hasil) do
-        local label = formatPetLabel(pet)
-        if string.lower(label):find(string.lower(filterText)) then
-            if labelToUUID[label] then
-                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
-            end
-            table.insert(options, label)
-            labelToUUID[label] = pet.uuid
-        end
-    end
-    table.sort(options, sortAlphabetically)
-    if #options == 0 then options = {"❌ Tidak ada pet favorit"}
-    _G._timMap = labelToUUID
-    return options
-end
-
-local function getTargetLevelOptions(filterText)
-    filterText = filterText or ""
-    local hasil = DataPetModule.findPets({ isFavorite = false })
-    local options = {}
-    local labelToUUID = {}
-    for _, pet in ipairs(hasil) do
-        local label = formatPetLabel(pet)
-        if string.lower(label):find(string.lower(filterText)) then
-            if labelToUUID[label] then
-                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
-            end
-            table.insert(options, label)
-            labelToUUID[label] = pet.uuid
-        end
-    end
-    table.sort(options, sortAlphabetically)
-    if #options == 0 then options = {"❌ Tidak ada pet non-favorit"}
-    _G._targetLevelMap = labelToUUID
-    return options
-end
-
-local function getPnpOptions(filterText)
-    filterText = filterText or ""
-    local hasil = DataPetModule.findPets({ isFavorite = true })
-    local options = {}
-    local labelToUUID = {}
-    for _, pet in ipairs(hasil) do
-        local label = formatPetLabel(pet)
-        if string.lower(label):find(string.lower(filterText)) then
-            if labelToUUID[label] then
-                label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
-            end
-            table.insert(options, label)
-            labelToUUID[label] = pet.uuid
-        end
-    end
-    table.sort(options, sortAlphabetically)
-    if #options == 0 then options = {"❌ Tidak ada pet favorit"}
-    _G._pnpMap = labelToUUID
-    return options
+    return options, map
 end
 
 -- ============================================================
--- SAVE / LOAD
+-- SAVE / LOAD (dengan flag untuk menghindari update UI saat load awal)
 -- ============================================================
 
 local function saveConfig()
@@ -639,55 +511,17 @@ local function loadConfig()
         state.pnpPickupDelay = decoded.pnpPickupDelay or 0.6
         state.pnpPlaceDelay = decoded.pnpPlaceDelay or 0
         print("✅ Konfigurasi dimuat dari " .. CONFIG_FILE)
-        updateAllUI()
+        -- Update UI hanya jika dropdown sudah dibuat
+        if typeof(updateAllUI) == "function" then
+            updateAllUI()
+        end
     else
         warn("❌ Gagal memuat file.")
     end
 end
 
-local function resetAllSettings()
-    if state.isSharkActive then
-        state.isSharkActive = false
-        unequipTargetAndEquipShark()
-        unequipAllGardenPets({}, 1.0)
-        if state.selectedMimicUUID then
-            SharkLogic.unequipPet(PetsService, state.selectedMimicUUID)
-        end
-        if state.selectedSharkUUID then
-            SharkLogic.unequipPet(PetsService, state.selectedSharkUUID)
-        end
-        if SharkToggle then SharkToggle:SetValue(false) end
-    end
-    if state.isLevelingActive then
-        stopLeveling()
-        if LevelingToggle then LevelingToggle:SetValue(false) end
-    end
-    if state.pnpActive then
-        state.pnpActive = false
-        for uuid, _ in pairs(state.pnpProcessing) do
-            state.pnpProcessing[uuid] = false
-        end
-        if PnpToggle then PnpToggle:SetValue(false) end
-    end
-
-    state.selectedMimicUUID = nil
-    state.selectedSharkUUID = nil
-    state.targetQueue = {}
-    state.levelingTim = {}
-    state.levelingTargets = {}
-    state.pnpPets = {}
-    state.tumbalNames = {"Dog"}
-    state.minLevel = 100
-    state.targetLevel = 100
-    state.pnpPickupDelay = 0.6
-    state.pnpPlaceDelay = 0
-
-    updateAllUI()
-    print("🔄 Semua pengaturan direset ke default.")
-end
-
 -- ============================================================
--- UI (Rayfield GEN2)
+-- UI (RAYFIELD GEN2)
 -- ============================================================
 
 local Window = Rayfield:CreateWindow({
@@ -701,50 +535,52 @@ local Window = Rayfield:CreateWindow({
     key = Enum.KeyCode.K,
 })
 
--- Variabel untuk menyimpan referensi dropdown
+-- Variabel untuk dropdown dan toggle
 local MimicDropdown, SharkDropdown, TargetDropdown
 local TimDropdown, TargetLevelDropdown, PnpDropdown
-local TumbalInput, MinLevelSlider, TargetLevelSlider
 local SharkToggle, LevelingToggle, PnpToggle
+local TumbalInput, MinLevelSlider, TargetLevelSlider
 
 -- ============================================================
--- UPDATE UI
+-- UPDATE UI (didefinisikan setelah dropdown dibuat)
 -- ============================================================
 
 local function updateAllUI()
     if MimicDropdown then
-        local opts = getMimicOptions()
+        local opts, map = getOptionsFor("mimic")
         MimicDropdown:Refresh(opts)
         if state.selectedMimicUUID then
-            for label, uuid in pairs(_G._mimicMap or {}) do
+            for label, uuid in pairs(map) do
                 if uuid == state.selectedMimicUUID then
                     MimicDropdown:SetValue(label)
                     break
                 end
             end
         end
+        _G._mimicMap = map
     end
 
     if SharkDropdown then
-        local opts = getSharkOptions()
+        local opts, map = getOptionsFor("shark")
         SharkDropdown:Refresh(opts)
         if state.selectedSharkUUID then
-            for label, uuid in pairs(_G._sharkMap or {}) do
+            for label, uuid in pairs(map) do
                 if uuid == state.selectedSharkUUID then
                     SharkDropdown:SetValue(label)
                     break
                 end
             end
         end
+        _G._sharkMap = map
     end
 
     if TargetDropdown then
-        local opts = getTargetOptions()
+        local opts, map = getOptionsFor("target")
         TargetDropdown:Refresh(opts)
         if #state.targetQueue > 0 then
             local selectedLabels = {}
             for _, uuid in ipairs(state.targetQueue) do
-                for label, u in pairs(_G._targetMap or {}) do
+                for label, u in pairs(map) do
                     if u == uuid then
                         table.insert(selectedLabels, label)
                         break
@@ -755,15 +591,16 @@ local function updateAllUI()
                 TargetDropdown:SetValue(selectedLabels)
             end
         end
+        _G._targetMap = map
     end
 
     if TimDropdown then
-        local opts = getTimOptions()
+        local opts, map = getOptionsFor("tim")
         TimDropdown:Refresh(opts)
         if #state.levelingTim > 0 then
             local selectedLabels = {}
             for _, uuid in ipairs(state.levelingTim) do
-                for label, u in pairs(_G._timMap or {}) do
+                for label, u in pairs(map) do
                     if u == uuid then
                         table.insert(selectedLabels, label)
                         break
@@ -774,15 +611,16 @@ local function updateAllUI()
                 TimDropdown:SetValue(selectedLabels)
             end
         end
+        _G._timMap = map
     end
 
     if TargetLevelDropdown then
-        local opts = getTargetLevelOptions()
+        local opts, map = getOptionsFor("targetlevel")
         TargetLevelDropdown:Refresh(opts)
         if #state.levelingTargets > 0 then
             local selectedLabels = {}
             for _, uuid in ipairs(state.levelingTargets) do
-                for label, u in pairs(_G._targetLevelMap or {}) do
+                for label, u in pairs(map) do
                     if u == uuid then
                         table.insert(selectedLabels, label)
                         break
@@ -793,15 +631,16 @@ local function updateAllUI()
                 TargetLevelDropdown:SetValue(selectedLabels)
             end
         end
+        _G._targetLevelMap = map
     end
 
     if PnpDropdown then
-        local opts = getPnpOptions()
+        local opts, map = getOptionsFor("pnp")
         PnpDropdown:Refresh(opts)
         if #state.pnpPets > 0 then
             local selectedLabels = {}
             for _, uuid in ipairs(state.pnpPets) do
-                for label, u in pairs(_G._pnpMap or {}) do
+                for label, u in pairs(map) do
                     if u == uuid then
                         table.insert(selectedLabels, label)
                         break
@@ -812,6 +651,7 @@ local function updateAllUI()
                 PnpDropdown:SetValue(selectedLabels)
             end
         end
+        _G._pnpMap = map
     end
 
     if TumbalInput then
@@ -836,35 +676,35 @@ sharkTab:CreateInput({
     placeholder = "Filter...",
     value = "",
     flag = "mimicFilter",
-    callback = function(Value)
+    callback = function(v)
         if MimicDropdown then
-            local opts = getMimicOptions(Value)
+            local opts, map = getOptionsFor("mimic", v)
             MimicDropdown:Refresh(opts)
             if state.selectedMimicUUID then
-                for label, uuid in pairs(_G._mimicMap or {}) do
+                for label, uuid in pairs(map) do
                     if uuid == state.selectedMimicUUID then
                         MimicDropdown:SetValue(label)
                         break
                     end
                 end
             end
+            _G._mimicMap = map
         end
     end
 })
 
 MimicDropdown = sharkTab:CreateDropdown({
     name = "Pilih Mimic",
-    options = getMimicOptions(),
+    options = getOptionsFor("mimic"),
     value = "",
     multiSelect = false,
     flag = "mimicDropdown",
-    callback = function(option)
-        local selectedLabel = (type(option) == "table") and option[1] or option
+    callback = function(val)
         local map = _G._mimicMap or {}
-        local uuid = map[selectedLabel]
+        local uuid = map[val]
         if uuid then
             state.selectedMimicUUID = uuid
-            print("✅ Mimic dipilih:", selectedLabel, "UUID:", uuid)
+            print("✅ Mimic:", val, "UUID:", uuid)
         end
     end
 })
@@ -874,35 +714,35 @@ sharkTab:CreateInput({
     placeholder = "Filter...",
     value = "",
     flag = "sharkFilter",
-    callback = function(Value)
+    callback = function(v)
         if SharkDropdown then
-            local opts = getSharkOptions(Value)
+            local opts, map = getOptionsFor("shark", v)
             SharkDropdown:Refresh(opts)
             if state.selectedSharkUUID then
-                for label, uuid in pairs(_G._sharkMap or {}) do
+                for label, uuid in pairs(map) do
                     if uuid == state.selectedSharkUUID then
                         SharkDropdown:SetValue(label)
                         break
                     end
                 end
             end
+            _G._sharkMap = map
         end
     end
 })
 
 SharkDropdown = sharkTab:CreateDropdown({
     name = "Pilih Shark",
-    options = getSharkOptions(),
+    options = getOptionsFor("shark"),
     value = "",
     multiSelect = false,
     flag = "sharkDropdown",
-    callback = function(option)
-        local selectedLabel = (type(option) == "table") and option[1] or option
+    callback = function(val)
         local map = _G._sharkMap or {}
-        local uuid = map[selectedLabel]
+        local uuid = map[val]
         if uuid then
             state.selectedSharkUUID = uuid
-            print("✅ Shark dipilih:", selectedLabel, "UUID:", uuid)
+            print("✅ Shark:", val, "UUID:", uuid)
         end
     end
 })
@@ -912,14 +752,14 @@ sharkTab:CreateInput({
     placeholder = "Filter...",
     value = "",
     flag = "targetFilter",
-    callback = function(Value)
+    callback = function(v)
         if TargetDropdown then
-            local opts = getTargetOptions(Value)
+            local opts, map = getOptionsFor("target", v)
             TargetDropdown:Refresh(opts)
             if #state.targetQueue > 0 then
                 local selectedLabels = {}
                 for _, uuid in ipairs(state.targetQueue) do
-                    for label, u in pairs(_G._targetMap or {}) do
+                    for label, u in pairs(map) do
                         if u == uuid then
                             table.insert(selectedLabels, label)
                             break
@@ -930,44 +770,43 @@ sharkTab:CreateInput({
                     TargetDropdown:SetValue(selectedLabels)
                 end
             end
+            _G._targetMap = map
         end
     end
 })
 
 TargetDropdown = sharkTab:CreateDropdown({
     name = "Pilih Target (Multiple, Non-Fav, Normal)",
-    options = getTargetOptions(),
+    options = getOptionsFor("target"),
     value = {},
     multiSelect = true,
     flag = "targetDropdown",
-    callback = function(selectedLabels)
+    callback = function(vals)
         local map = _G._targetMap or {}
         state.targetQueue = {}
-        for _, label in ipairs(selectedLabels) do
+        for _, label in ipairs(vals) do
             local uuid = map[label]
             if uuid then table.insert(state.targetQueue, uuid) end
         end
         state.currentTargetIndex = 1
-        print("✅ Target dipilih:", #state.targetQueue, "pet")
+        print("✅ Target dipilih:", #state.targetQueue)
     end
 })
 
 TumbalInput = sharkTab:CreateInput({
     name = "Nama Tumbal (pisah koma)",
-    placeholder = "Contoh: Dog, Golden Lab, Black Bunny",
+    placeholder = "Dog, Cat, Bunny",
     value = table.concat(state.tumbalNames, ", "),
     flag = "tumbalInput",
-    callback = function(Value)
-        if Value and Value ~= "" then
-            local names = {}
-            for token in string.gmatch(Value, "[^,]+") do
-                local trimmed = token:match("^%s*(.-)%s*$")
-                if trimmed ~= "" then table.insert(names, trimmed) end
-            end
-            if #names > 0 then
-                state.tumbalNames = names
-                print("✅ Tumbal diubah:", table.concat(names, ", "))
-            end
+    callback = function(v)
+        local names = {}
+        for token in string.gmatch(v, "[^,]+") do
+            local trimmed = token:match("^%s*(.-)%s*$")
+            if trimmed ~= "" then table.insert(names, trimmed) end
+        end
+        if #names > 0 then
+            state.tumbalNames = names
+            print("✅ Tumbal:", table.concat(names, ", "))
         end
     end
 })
@@ -979,66 +818,35 @@ MinLevelSlider = sharkTab:CreateSlider({
     increment = 1,
     value = state.minLevel,
     flag = "minLevelSlider",
-    callback = function(value)
-        state.minLevel = value
-        print("📊 Min Level Tumbal:", value)
-    end
-})
-
-sharkTab:CreateButton({
-    name = "🔄 Refresh Data Pet",
-    flag = "refreshShark",
-    callback = function()
-        updateAllUI()
-        print("🔄 Data pet diperbarui.")
+    callback = function(v)
+        state.minLevel = v
+        print("📊 Min Level:", v)
     end
 })
 
 SharkToggle = sharkTab:CreateToggle({
     name = "▶️ Start / Stop Shark",
-    value = false,
+    value = state.isSharkActive,
     flag = "sharkToggle",
-    callback = function(Value)
-        if Value then
-            if state.isLevelingActive then
-                print("⚠️ Auto Leveling sedang aktif! Matikan dulu.")
-                SharkToggle:SetValue(false)
-                return
-            end
-            if not state.selectedMimicUUID then
-                print("⚠️ Pilih Mimic dulu!")
-                SharkToggle:SetValue(false)
-                return
-            end
-            if not state.selectedSharkUUID then
-                print("⚠️ Pilih Shark dulu!")
-                SharkToggle:SetValue(false)
-                return
-            end
-            if #state.targetQueue == 0 then
-                print("⚠️ Pilih target dulu (multiple)!")
-                SharkToggle:SetValue(false)
-                return
-            end
-
+    callback = function(v)
+        state.isSharkActive = v
+        if v then
+            print("▶️ Shark ON")
             unequipAllGardenPets({state.selectedMimicUUID, state.selectedSharkUUID}, 1.0)
             task.wait(0.2)
-
-            state.isSharkActive = true
-            print("▶️ Auto Shark dimulai dengan", #state.targetQueue, "target")
-            SharkLogic.equipPet(PetsService, state.selectedMimicUUID, SharkLogic.defaultConfig.slotCFrame)
-            SharkLogic.equipPet(PetsService, state.selectedSharkUUID, SharkLogic.defaultConfig.slotCFrame)
-        else
-            state.isSharkActive = false
-            print("⏹️ Auto Shark dihentikan")
-            unequipTargetAndEquipShark()
-            unequipAllGardenPets({}, 1.0)
             if state.selectedMimicUUID then
-                SharkLogic.unequipPet(PetsService, state.selectedMimicUUID)
+                SharkLogic.equipPet(PetsService, state.selectedMimicUUID, SharkLogic.defaultConfig.slotCFrame)
             end
             if state.selectedSharkUUID then
-                SharkLogic.unequipPet(PetsService, state.selectedSharkUUID)
+                SharkLogic.equipPet(PetsService, state.selectedSharkUUID, SharkLogic.defaultConfig.slotCFrame)
             end
+            state.isProcessing = false
+            state.cycleCount = 0
+        else
+            print("⏹️ Shark OFF")
+            state.isSharkActive = false
+            unequipTargetAndEquipShark()
+            unequipAllGardenPets({}, 1.0)
         end
     end
 })
@@ -1054,14 +862,14 @@ levelingTab:CreateInput({
     placeholder = "Filter...",
     value = "",
     flag = "timFilter",
-    callback = function(Value)
+    callback = function(v)
         if TimDropdown then
-            local opts = getTimOptions(Value)
+            local opts, map = getOptionsFor("tim", v)
             TimDropdown:Refresh(opts)
             if #state.levelingTim > 0 then
                 local selectedLabels = {}
                 for _, uuid in ipairs(state.levelingTim) do
-                    for label, u in pairs(_G._timMap or {}) do
+                    for label, u in pairs(map) do
                         if u == uuid then
                             table.insert(selectedLabels, label)
                             break
@@ -1072,33 +880,29 @@ levelingTab:CreateInput({
                     TimDropdown:SetValue(selectedLabels)
                 end
             end
+            _G._timMap = map
         end
     end
 })
 
 TimDropdown = levelingTab:CreateDropdown({
-    name = "Tim Leveling (Max 7, Favorit)",
-    options = getTimOptions(),
+    name = "Tim Leveling (Max 7)",
+    options = getOptionsFor("tim"),
     value = {},
     multiSelect = true,
     flag = "timDropdown",
-    callback = function(selectedLabels)
+    callback = function(vals)
         local map = _G._timMap or {}
         state.levelingTim = {}
-        for _, label in ipairs(selectedLabels) do
+        for _, label in ipairs(vals) do
             local uuid = map[label]
             if uuid then table.insert(state.levelingTim, uuid) end
         end
         if #state.levelingTim > 7 then
-            print("⚠️ Maksimal 7 pet! Hanya 7 pertama yang dipakai.")
+            print("⚠️ Maksimal 7 pet! Ambil 7 pertama.")
             table.move(state.levelingTim, 1, 7, 1, {})
         end
-        print("✅ Tim Leveling dipilih:", #state.levelingTim, "pet")
-        if state.isLevelingActive and not isLevelingProcessing then
-            state.isLevelingActive = false
-            task.wait(0.1)
-            startLeveling()
-        end
+        print("✅ Tim Leveling:", #state.levelingTim)
     end
 })
 
@@ -1107,14 +911,14 @@ levelingTab:CreateInput({
     placeholder = "Filter...",
     value = "",
     flag = "targetLevelFilter",
-    callback = function(Value)
+    callback = function(v)
         if TargetLevelDropdown then
-            local opts = getTargetLevelOptions(Value)
+            local opts, map = getOptionsFor("targetlevel", v)
             TargetLevelDropdown:Refresh(opts)
             if #state.levelingTargets > 0 then
                 local selectedLabels = {}
                 for _, uuid in ipairs(state.levelingTargets) do
-                    for label, u in pairs(_G._targetLevelMap or {}) do
+                    for label, u in pairs(map) do
                         if u == uuid then
                             table.insert(selectedLabels, label)
                             break
@@ -1125,30 +929,25 @@ levelingTab:CreateInput({
                     TargetLevelDropdown:SetValue(selectedLabels)
                 end
             end
+            _G._targetLevelMap = map
         end
     end
 })
 
 TargetLevelDropdown = levelingTab:CreateDropdown({
-    name = "Target Leveling (Non-Favorit)",
-    options = getTargetLevelOptions(),
+    name = "Target Leveling",
+    options = getOptionsFor("targetlevel"),
     value = {},
     multiSelect = true,
     flag = "targetLevelDropdown",
-    callback = function(selectedLabels)
+    callback = function(vals)
         local map = _G._targetLevelMap or {}
         state.levelingTargets = {}
-        for _, label in ipairs(selectedLabels) do
+        for _, label in ipairs(vals) do
             local uuid = map[label]
             if uuid then table.insert(state.levelingTargets, uuid) end
         end
-        state.currentLevelingTargetIndex = 1
-        print("✅ Target Leveling dipilih:", #state.levelingTargets, "pet")
-        if state.isLevelingActive and not isLevelingProcessing then
-            state.isLevelingActive = false
-            task.wait(0.1)
-            startLeveling()
-        end
+        print("✅ Target Leveling:", #state.levelingTargets)
     end
 })
 
@@ -1159,35 +958,20 @@ TargetLevelSlider = levelingTab:CreateSlider({
     increment = 1,
     value = state.targetLevel,
     flag = "targetLevelSlider",
-    callback = function(value)
-        state.targetLevel = value
-        print("🎯 Target Level:", value)
-        if state.isLevelingActive and not isLevelingProcessing then
-            state.isLevelingActive = false
-            task.wait(0.1)
-            startLeveling()
-        end
+    callback = function(v)
+        state.targetLevel = v
+        print("🎯 Target Level:", v)
     end
 })
 
 LevelingToggle = levelingTab:CreateToggle({
     name = "▶️ Start / Stop Leveling",
-    value = false,
+    value = state.isLevelingActive,
     flag = "levelingToggle",
-    callback = function(Value)
-        if Value then
+    callback = function(v)
+        if v then
             if state.isSharkActive then
                 print("⚠️ Auto Shark sedang aktif! Matikan dulu.")
-                LevelingToggle:SetValue(false)
-                return
-            end
-            if #state.levelingTim == 0 then
-                print("⚠️ Pilih Tim Leveling dulu!")
-                LevelingToggle:SetValue(false)
-                return
-            end
-            if #state.levelingTargets == 0 then
-                print("⚠️ Pilih Target Leveling dulu!")
                 LevelingToggle:SetValue(false)
                 return
             end
@@ -1210,14 +994,14 @@ pnpTab:CreateInput({
     placeholder = "Filter...",
     value = "",
     flag = "pnpFilter",
-    callback = function(Value)
+    callback = function(v)
         if PnpDropdown then
-            local opts = getPnpOptions(Value)
+            local opts, map = getOptionsFor("pnp", v)
             PnpDropdown:Refresh(opts)
             if #state.pnpPets > 0 then
                 local selectedLabels = {}
                 for _, uuid in ipairs(state.pnpPets) do
-                    for label, u in pairs(_G._pnpMap or {}) do
+                    for label, u in pairs(map) do
                         if u == uuid then
                             table.insert(selectedLabels, label)
                             break
@@ -1228,24 +1012,25 @@ pnpTab:CreateInput({
                     PnpDropdown:SetValue(selectedLabels)
                 end
             end
+            _G._pnpMap = map
         end
     end
 })
 
 PnpDropdown = pnpTab:CreateDropdown({
     name = "Pilih Pet untuk PNP",
-    options = getPnpOptions(),
+    options = getOptionsFor("pnp"),
     value = {},
     multiSelect = true,
     flag = "pnpDropdown",
-    callback = function(selectedLabels)
+    callback = function(vals)
         local map = _G._pnpMap or {}
         state.pnpPets = {}
-        for _, label in ipairs(selectedLabels) do
+        for _, label in ipairs(vals) do
             local uuid = map[label]
             if uuid then table.insert(state.pnpPets, uuid) end
         end
-        print("✅ PNP Pets dipilih:", #state.pnpPets, "pet")
+        print("✅ PNP Pets:", #state.pnpPets)
     end
 })
 
@@ -1254,14 +1039,10 @@ pnpTab:CreateInput({
     placeholder = "0.6",
     value = tostring(state.pnpPickupDelay),
     flag = "pickupDelay",
-    callback = function(Value)
-        local num = tonumber(Value)
-        if num and num >= 0 then
-            state.pnpPickupDelay = num
-            print("📦 Pickup Delay:", num)
-        else
-            print("⚠️ Masukkan angka valid")
-        end
+    callback = function(v)
+        local num = tonumber(v)
+        if num and num >= 0 then state.pnpPickupDelay = num end
+        print("📦 Pickup Delay:", state.pnpPickupDelay)
     end
 })
 
@@ -1270,46 +1051,20 @@ pnpTab:CreateInput({
     placeholder = "0",
     value = tostring(state.pnpPlaceDelay),
     flag = "placeDelay",
-    callback = function(Value)
-        local num = tonumber(Value)
-        if num and num >= 0 then
-            state.pnpPlaceDelay = num
-            print("📦 Place Delay:", num)
-        else
-            print("⚠️ Masukkan angka valid")
-        end
-    end
-})
-
-pnpTab:CreateButton({
-    name = "🔄 Refresh Data Pet",
-    flag = "pnpRefresh",
-    callback = function()
-        updateAllUI()
-        print("🔄 Data pet diperbarui.")
+    callback = function(v)
+        local num = tonumber(v)
+        if num and num >= 0 then state.pnpPlaceDelay = num end
+        print("📦 Place Delay:", state.pnpPlaceDelay)
     end
 })
 
 PnpToggle = pnpTab:CreateToggle({
     name = "▶️ Start / Stop PNP",
-    value = false,
+    value = state.pnpActive,
     flag = "pnpToggle",
-    callback = function(Value)
-        if Value then
-            if #state.pnpPets == 0 then
-                print("⚠️ Pilih pet dulu!")
-                PnpToggle:SetValue(false)
-                return
-            end
-            state.pnpActive = true
-            print("▶️ PNP dimulai untuk", #state.pnpPets, "pet")
-        else
-            state.pnpActive = false
-            for uuid, _ in pairs(state.pnpProcessing) do
-                state.pnpProcessing[uuid] = false
-            end
-            print("⏹️ PNP dihentikan")
-        end
+    callback = function(v)
+        state.pnpActive = v
+        print(v and "▶️ PNP ON" or "⏹️ PNP OFF")
     end
 })
 
@@ -1334,13 +1089,34 @@ settingsTab:CreateButton({
 settingsTab:CreateButton({
     name = "🔄 Reset Semua",
     flag = "reset",
-    callback = resetAllSettings
+    callback = function()
+        state.selectedMimicUUID = nil
+        state.selectedSharkUUID = nil
+        state.targetQueue = {}
+        state.tumbalNames = {"Dog"}
+        state.minLevel = 100
+        state.levelingTim = {}
+        state.levelingTargets = {}
+        state.targetLevel = 100
+        state.pnpPets = {}
+        state.pnpPickupDelay = 0.6
+        state.pnpPlaceDelay = 0
+        state.isSharkActive = false
+        state.isLevelingActive = false
+        state.pnpActive = false
+        if SharkToggle then SharkToggle:SetValue(false) end
+        if LevelingToggle then LevelingToggle:SetValue(false) end
+        if PnpToggle then PnpToggle:SetValue(false) end
+        updateAllUI()
+        print("🔄 Semua reset")
+    end
 })
 
 -- ============================================================
--- INISIALISASI
+-- LOAD KONFIGURASI SETELAH UI SIAP
 -- ============================================================
 
+loadConfig()
 updateAllUI()
 
-print("✅ Pria Solo HUB siap (Rayfield GEN2). Tekan K untuk membuka UI.")
+print("✅ Pria Solo HUB siap. Tekan K untuk membuka UI.")
