@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield GEN2 (Final, tanpa SetValue)
+-- Pria Solo HUB - Rayfield GEN2 (Final, tanpa SetValue error)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -458,6 +458,65 @@ local function getOptionsFor(type, filter)
 end
 
 -- ============================================================
+-- SAVE / LOAD STATE (untuk UUID, queue, dll)
+-- ============================================================
+
+local function saveConfig()
+    local config = {
+        selectedMimicUUID = state.selectedMimicUUID,
+        selectedSharkUUID = state.selectedSharkUUID,
+        targetQueue = state.targetQueue,
+        tumbalNames = state.tumbalNames,
+        minLevel = state.minLevel,
+        levelingTim = state.levelingTim,
+        levelingTargets = state.levelingTargets,
+        targetLevel = state.targetLevel,
+        pnpPets = state.pnpPets,
+        pnpPickupDelay = state.pnpPickupDelay,
+        pnpPlaceDelay = state.pnpPlaceDelay,
+        timestamp = os.time()
+    }
+    local json = HttpService:JSONEncode(config)
+    local success, err = pcall(function()
+        writefile(CONFIG_FILE, json)
+    end)
+    if success then
+        print("✅ Konfigurasi state disimpan ke " .. CONFIG_FILE)
+    else
+        warn("❌ Gagal menyimpan state: " .. tostring(err))
+    end
+end
+
+local function loadConfig()
+    local success, data = pcall(function()
+        return readfile(CONFIG_FILE)
+    end)
+    if not success then
+        print("ℹ️ File state tidak ditemukan, gunakan default.")
+        return
+    end
+    local decoded = HttpService:JSONDecode(data)
+    if decoded then
+        state.selectedMimicUUID = decoded.selectedMimicUUID
+        state.selectedSharkUUID = decoded.selectedSharkUUID
+        state.targetQueue = decoded.targetQueue or {}
+        state.tumbalNames = decoded.tumbalNames or {"Dog"}
+        state.minLevel = decoded.minLevel or 100
+        state.levelingTim = decoded.levelingTim or {}
+        state.levelingTargets = decoded.levelingTargets or {}
+        state.targetLevel = decoded.targetLevel or 100
+        state.pnpPets = decoded.pnpPets or {}
+        state.pnpPickupDelay = decoded.pnpPickupDelay or 0.6
+        state.pnpPlaceDelay = decoded.pnpPlaceDelay or 0
+        print("✅ State dimuat dari " .. CONFIG_FILE)
+        -- Refresh UI setelah load
+        updateAllUI()
+    else
+        warn("❌ Gagal memuat state.")
+    end
+end
+
+-- ============================================================
 -- UI (RAYFIELD GEN2)
 -- ============================================================
 
@@ -666,7 +725,7 @@ SharkToggle = sharkTab:CreateToggle({
 })
 
 -- ============================================================
--- TAB 2: AUTO LEVELING
+-- TAB 2: AUTO LEVELING (max level 500)
 -- ============================================================
 
 local levelingTab = Window:CreateTab({ name = "Auto Leveling", icon = "rocket" })
@@ -739,6 +798,7 @@ TargetLevelDropdown = levelingTab:CreateDropdown({
     end
 })
 
+-- Slider target level dengan max 500
 TargetLevelSlider = levelingTab:CreateSlider({
     name = "Target Level",
     min = 0,
@@ -761,27 +821,13 @@ LevelingToggle = levelingTab:CreateToggle({
         if v then
             if state.isSharkActive then
                 print("⚠️ Auto Shark sedang aktif! Matikan dulu.")
-                -- tidak ada SetValue di sini, biarkan toggle tetap ON atau OFF sesuai logika
-                -- tapi kita harus set toggle kembali ke false jika error
-                -- cara: kita set state.isLevelingActive = false dan return
-                state.isLevelingActive = false
-                -- kita tidak bisa set toggle manual, biarkan flag yang handle
-                return
-            end
-            if #state.levelingTim == 0 then
-                print("⚠️ Pilih Tim Leveling dulu!")
-                state.isLevelingActive = false
-                return
-            end
-            if #state.levelingTargets == 0 then
-                print("⚠️ Pilih Target Leveling dulu!")
-                state.isLevelingActive = false
+                -- Gunakan pcall untuk aman, karena SetValue mungkin tidak ada
+                pcall(function() LevelingToggle:SetValue(false) end)
                 return
             end
             startLeveling()
         else
             stopLeveling()
-            state.isLevelingActive = false
         end
         saveConfig()
     end
