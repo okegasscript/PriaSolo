@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield GEN2 (dengan auto-save/load bawaan)
+-- Pria Solo HUB - Rayfield GEN2 (Fix SetValue)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -458,7 +458,7 @@ local function getOptionsFor(type, filter)
 end
 
 -- ============================================================
--- SAVE / LOAD STATE (manual untuk data kompleks)
+-- SAVE / LOAD STATE
 -- ============================================================
 
 local function saveConfig()
@@ -481,7 +481,7 @@ local function saveConfig()
         writefile(CONFIG_FILE, json)
     end)
     if success then
-        print("✅ Konfigurasi state disimpan ke " .. CONFIG_FILE)
+        print("✅ State disimpan ke " .. CONFIG_FILE)
     else
         warn("❌ Gagal menyimpan state: " .. tostring(err))
     end
@@ -521,8 +521,8 @@ end
 local Window = Rayfield:CreateWindow({
     name = "Pria Solo HUB",
     configuration = {
-        autoSave = true,   -- otomatis simpan flag UI (dropdown value, toggle, slider)
-        autoLoad = true,   -- otomatis muat flag UI saat startup
+        autoSave = true,
+        autoLoad = true,
         fileName = "Settings",
         customFolder = "PriaSolo",
     },
@@ -536,7 +536,7 @@ local SharkToggle, LevelingToggle, PnpToggle
 local TumbalInput, MinLevelSlider, TargetLevelSlider
 
 -- ============================================================
--- UPDATE UI (untuk mengisi dropdown options dan restore state)
+-- UPDATE UI (dipanggil setelah UI siap)
 -- ============================================================
 
 local function updateAllUI()
@@ -699,7 +699,7 @@ MimicDropdown = sharkTab:CreateDropdown({
         if uuid then
             state.selectedMimicUUID = uuid
             print("✅ Mimic:", val, "UUID:", uuid)
-            saveConfig() -- simpan state
+            saveConfig()
         end
     end
 })
@@ -1077,13 +1077,13 @@ PnpToggle = pnpTab:CreateToggle({
 })
 
 -- ============================================================
--- INISIALISASI AKHIR
+-- INISIALISASI AKHIR (LOAD STATE SETELAH UI SIAP)
 -- ============================================================
 
 -- Load state dari file (UUID, queue, dll)
 loadConfig()
 
--- Update UI dengan state yang sudah dimuat
+-- Update UI dengan state yang sudah dimuat (pastikan semua dropdown sudah ada)
 updateAllUI()
 
 print("✅ Pria Solo HUB siap. Tekan K untuk membuka UI.")
