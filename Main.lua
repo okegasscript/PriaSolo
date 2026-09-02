@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield GEN2 (Tanpa SetValue, Auto-Save Flag)
+-- Pria Solo HUB - Rayfield GEN2 (Final, tanpa SetValue error)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -509,6 +509,8 @@ local function loadConfig()
         state.pnpPickupDelay = decoded.pnpPickupDelay or 0.6
         state.pnpPlaceDelay = decoded.pnpPlaceDelay or 0
         print("✅ State dimuat dari " .. CONFIG_FILE)
+        -- Refresh UI setelah load
+        updateAllUI()
     else
         warn("❌ Gagal memuat state.")
     end
@@ -536,55 +538,29 @@ local SharkToggle, LevelingToggle, PnpToggle
 local TumbalInput, MinLevelSlider, TargetLevelSlider
 
 -- ============================================================
--- UPDATE UI (hanya refresh options, tidak set value)
+-- UPDATE UI (hanya refresh options dropdown, tidak set value input/slider)
 -- ============================================================
 
 local function updateAllUI()
     if MimicDropdown then
-        local opts = getOptionsFor("mimic")
-        MimicDropdown:Refresh(opts)
-        _G._mimicMap = opts
+        MimicDropdown:Refresh(getOptionsFor("mimic"))
     end
-
     if SharkDropdown then
-        local opts = getOptionsFor("shark")
-        SharkDropdown:Refresh(opts)
-        _G._sharkMap = opts
+        SharkDropdown:Refresh(getOptionsFor("shark"))
     end
-
     if TargetDropdown then
-        local opts = getOptionsFor("target")
-        TargetDropdown:Refresh(opts)
-        _G._targetMap = opts
+        TargetDropdown:Refresh(getOptionsFor("target"))
     end
-
     if TimDropdown then
-        local opts = getOptionsFor("tim")
-        TimDropdown:Refresh(opts)
-        _G._timMap = opts
+        TimDropdown:Refresh(getOptionsFor("tim"))
     end
-
     if TargetLevelDropdown then
-        local opts = getOptionsFor("targetlevel")
-        TargetLevelDropdown:Refresh(opts)
-        _G._targetLevelMap = opts
+        TargetLevelDropdown:Refresh(getOptionsFor("targetlevel"))
     end
-
     if PnpDropdown then
-        local opts = getOptionsFor("pnp")
-        PnpDropdown:Refresh(opts)
-        _G._pnpMap = opts
+        PnpDropdown:Refresh(getOptionsFor("pnp"))
     end
-
-    if TumbalInput then
-        TumbalInput:SetValue(table.concat(state.tumbalNames, ", "))
-    end
-    if MinLevelSlider then
-        MinLevelSlider:SetValue(state.minLevel)
-    end
-    if TargetLevelSlider then
-        TargetLevelSlider:SetValue(state.targetLevel)
-    end
+    -- Tidak set value untuk input/slider di sini untuk menghindari error
 end
 
 -- ============================================================
