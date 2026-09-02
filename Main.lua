@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield GEN2 (Final, tanpa Flags)
+-- Pria Solo HUB - Rayfield GEN2 (Final, Slider Leveling 1-500)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -483,7 +483,7 @@ local function saveConfig()
     if success then
         print("✅ Konfigurasi state disimpan ke " .. CONFIG_FILE)
     else
-        warn("⚠️ Gagal menyimpan state (writefile tidak didukung): " .. tostring(err))
+        warn("⚠️ Gagal menyimpan state: " .. tostring(err))
     end
 end
 
@@ -492,7 +492,7 @@ local function loadConfig()
         return readfile(CONFIG_FILE)
     end)
     if not success then
-        print("ℹ️ File state tidak ditemukan atau tidak bisa dibaca, gunakan default.")
+        print("ℹ️ File state tidak ditemukan, gunakan default.")
         return
     end
     local decoded = HttpService:JSONDecode(data)
@@ -724,7 +724,7 @@ SharkToggle = sharkTab:CreateToggle({
 })
 
 -- ============================================================
--- TAB 2: AUTO LEVELING (max level 500)
+-- TAB 2: AUTO LEVELING (max level 500, min 1)
 -- ============================================================
 
 local levelingTab = Window:CreateTab({ name = "Auto Leveling", icon = "rocket" })
@@ -797,10 +797,10 @@ TargetLevelDropdown = levelingTab:CreateDropdown({
     end
 })
 
--- Slider target level dengan max 500
+-- PERBAIKAN: Target Level slider dengan min=1, max=500
 TargetLevelSlider = levelingTab:CreateSlider({
     name = "Target Level",
-    min = 0,
+    min = 1,
     max = 500,
     increment = 1,
     value = state.targetLevel,
