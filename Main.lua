@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield GEN2 (Final, tanpa SetValue error)
+-- Pria Solo HUB - Rayfield GEN2 (Final, save/load aman)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -458,7 +458,7 @@ local function getOptionsFor(type, filter)
 end
 
 -- ============================================================
--- SAVE / LOAD STATE (untuk UUID, queue, dll)
+-- SAVE / LOAD STATE (dengan pcall agar aman)
 -- ============================================================
 
 local function saveConfig()
@@ -483,7 +483,7 @@ local function saveConfig()
     if success then
         print("✅ Konfigurasi state disimpan ke " .. CONFIG_FILE)
     else
-        warn("❌ Gagal menyimpan state: " .. tostring(err))
+        warn("⚠️ Gagal menyimpan state (writefile tidak didukung): " .. tostring(err))
     end
 end
 
@@ -492,7 +492,7 @@ local function loadConfig()
         return readfile(CONFIG_FILE)
     end)
     if not success then
-        print("ℹ️ File state tidak ditemukan, gunakan default.")
+        print("ℹ️ File state tidak ditemukan atau tidak bisa dibaca, gunakan default.")
         return
     end
     local decoded = HttpService:JSONDecode(data)
@@ -509,10 +509,10 @@ local function loadConfig()
         state.pnpPickupDelay = decoded.pnpPickupDelay or 0.6
         state.pnpPlaceDelay = decoded.pnpPlaceDelay or 0
         print("✅ State dimuat dari " .. CONFIG_FILE)
-        -- Refresh UI setelah load
+        -- Refresh UI setelah load (hanya refresh options, tidak set value)
         updateAllUI()
     else
-        warn("❌ Gagal memuat state.")
+        warn("❌ Gagal memuat state (corrupt JSON).")
     end
 end
 
@@ -821,7 +821,7 @@ LevelingToggle = levelingTab:CreateToggle({
         if v then
             if state.isSharkActive then
                 print("⚠️ Auto Shark sedang aktif! Matikan dulu.")
-                -- Gunakan pcall untuk aman, karena SetValue mungkin tidak ada
+                -- Gunakan pcall untuk aman
                 pcall(function() LevelingToggle:SetValue(false) end)
                 return
             end
@@ -912,7 +912,9 @@ PnpToggle = pnpTab:CreateToggle({
 -- INISIALISASI AKHIR
 -- ============================================================
 
-loadConfig()
 updateAllUI()
+
+-- Load konfigurasi state setelah UI siap (pcall untuk keamanan)
+pcall(loadConfig)
 
 print("✅ Pria Solo HUB siap. Tekan K untuk membuka UI.")
