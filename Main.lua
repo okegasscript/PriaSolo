@@ -1,5 +1,5 @@
 -- ============================================================
--- Pria Solo HUB - Rayfield GEN2 (Final, Format Rapi)
+-- Pria Solo HUB - FINAL (Format Dropdown Pendek)
 -- ============================================================
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -24,10 +24,9 @@ if not SharkLogic then warn("❌ Gagal memuat SharkLogic") return end
 print("✅ SharkLogic berhasil dimuat")
 
 -- ============================================================
--- FUNGSI BANTUAN
+-- FUNGSI BANTUAN (format paling pendek)
 -- ============================================================
 
--- Format pet label: "Blossoming Black Bunny | 1.23 KG | Lv.100"
 local function formatPetLabel(pet)
     local mut = pet.mutation or "Normal"
     local name = pet.name or "Unknown"
@@ -38,7 +37,8 @@ local function formatPetLabel(pet)
         weight = baseWeight + (level - 1) * 0.5599
     end
     local level = pet.level or 1
-    return string.format("%s %s | %.2f KG | Lv.%d", mut, name, weight, level)
+    -- Format pendek: "Blossoming Black Bunny | 1.23KG | Lv100"
+    return string.format("%s %s | %.2fKG | Lv%d", mut, name, weight, level)
 end
 
 local function sortAlphabetically(a, b)
@@ -415,7 +415,7 @@ NotificationEvent.OnClientEvent:Connect(function(message)
 end)
 
 -- ============================================================
--- FUNGSI UNTUK MENGAMBIL DATA DROPDOWN (format rapi)
+-- FUNGSI UNTUK MENGAMBIL DATA DROPDOWN
 -- ============================================================
 
 local function getOptionsFor(type, filter)
@@ -442,7 +442,7 @@ local function getOptionsFor(type, filter)
     local options = {}
     local map = {}
     for _, pet in ipairs(hasil) do
-        local label = formatPetLabel(pet)  -- format: "Mutasi Nama | Berat KG | Lv.Level"
+        local label = formatPetLabel(pet)  -- pendek
         if string.lower(label):find(string.lower(filter)) then
             if map[label] then
                 label = label .. " [" .. string.sub(pet.uuid, 1, 4) .. "]"
@@ -531,35 +531,18 @@ local Window = Rayfield:CreateWindow({
     key = Enum.KeyCode.K,
 })
 
--- Variabel untuk dropdown dan toggle
 local MimicDropdown, SharkDropdown, TargetDropdown
 local TimDropdown, TargetLevelDropdown, PnpDropdown
 local SharkToggle, LevelingToggle, PnpToggle
 local TumbalInput, MinLevelSlider, TargetLevelInput
 
--- ============================================================
--- UPDATE UI (hanya refresh options dropdown)
--- ============================================================
-
 local function updateAllUI()
-    if MimicDropdown then
-        MimicDropdown:Refresh(getOptionsFor("mimic"))
-    end
-    if SharkDropdown then
-        SharkDropdown:Refresh(getOptionsFor("shark"))
-    end
-    if TargetDropdown then
-        TargetDropdown:Refresh(getOptionsFor("target"))
-    end
-    if TimDropdown then
-        TimDropdown:Refresh(getOptionsFor("tim"))
-    end
-    if TargetLevelDropdown then
-        TargetLevelDropdown:Refresh(getOptionsFor("targetlevel"))
-    end
-    if PnpDropdown then
-        PnpDropdown:Refresh(getOptionsFor("pnp"))
-    end
+    if MimicDropdown then MimicDropdown:Refresh(getOptionsFor("mimic")) end
+    if SharkDropdown then SharkDropdown:Refresh(getOptionsFor("shark")) end
+    if TargetDropdown then TargetDropdown:Refresh(getOptionsFor("target")) end
+    if TimDropdown then TimDropdown:Refresh(getOptionsFor("tim")) end
+    if TargetLevelDropdown then TargetLevelDropdown:Refresh(getOptionsFor("targetlevel")) end
+    if PnpDropdown then PnpDropdown:Refresh(getOptionsFor("pnp")) end
 end
 
 -- ============================================================
@@ -725,7 +708,7 @@ SharkToggle = sharkTab:CreateToggle({
 })
 
 -- ============================================================
--- TAB 2: AUTO LEVELING (Target Level pakai Input)
+-- TAB 2: AUTO LEVELING
 -- ============================================================
 
 local levelingTab = Window:CreateTab({ name = "Auto Leveling", icon = "rocket" })
