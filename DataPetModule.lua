@@ -1,12 +1,12 @@
 -- ============================================================
 -- DataPetModule.lua
--- Versi Final dengan MUTATION_MAP yang benar
+-- Versi Final dengan PetMutationRegistry
 -- ============================================================
 
 local DataPetModule = {}
 
 -- ============================================================
--- MUTATION MAP (sesuai permintaan)
+-- MUTATION MAP (fallback jika registry tidak tersedia)
 -- ============================================================
 local MUTATION_MAP = {
     ["@"] = "Blossoming",
@@ -24,18 +24,64 @@ local MUTATION_MAP = {
 }
 
 -- ============================================================
--- FUNGSI TERJEMAHAN MUTASI
+-- MUTATION REGISTRY CACHE
+-- ============================================================
+local mutationRegistryCache = nil
+local function getMutationRegistry()
+    if mutationRegistryCache ~= nil then
+        return mutationRegistryCache
+    end
+    
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local registry = ReplicatedStorage:FindFirstChild("Data")
+    if registry then
+        registry = registry:FindFirstChild("PetRegistry")
+        if registry then
+            registry = registry:FindFirstChild("PetMutationRegistry")
+        end
+    end
+    
+    if registry then
+        mutationRegistryCache = registry
+    else
+        mutationRegistryCache = false -- tandai bahwa tidak ada
+    end
+    return mutationRegistryCache
+end
+
+-- ============================================================
+-- FUNGSI TERJEMAHAN MUTASI (dengan registry)
 -- ============================================================
 function DataPetModule.getAutoMutationName(rawCode)
     if not rawCode or rawCode == "" then
         return "Normal"
     end
-    -- Cari di MUTATION_MAP
+    
+    -- Coba di registry terlebih dahulu
+    local registry = getMutationRegistry()
+    if registry and type(registry) == "table" then
+        -- Coba akses langsung sebagai tabel (jika module)
+        local success, result = pcall(function()
+            if registry[rawCode] then
+                return registry[rawCode]
+            end
+            -- Jika registry adalah module, mungkin ada fungsi mapping
+            if registry.GetMutationName then
+                return registry.GetMutationName(rawCode)
+            end
+        end)
+        if success and result then
+            return result
+        end
+    end
+    
+    -- Fallback ke MUTATION_MAP
     local mapped = MUTATION_MAP[rawCode]
     if mapped then
         return mapped
     end
-    -- Jika tidak ditemukan, coba cari di ReplicatedStorage (fallback)
+    
+    -- Jika tidak ditemukan, coba cari di ReplicatedStorage (fallback lama)
     for _, obj in ipairs(game:GetService("ReplicatedStorage"):GetDescendants()) do
         if obj:IsA("ModuleScript") and (
             obj.Name:lower():find("mut") or
@@ -54,6 +100,7 @@ function DataPetModule.getAutoMutationName(rawCode)
             end
         end
     end
+    
     return tostring(rawCode)
 end
 
